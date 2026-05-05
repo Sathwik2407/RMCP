@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RMCP — Raj Multi Color Print</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C; --gold-light: #E8D5A3; --gold-dark: #9B7A2F;
+  --ink: #1C1A14; --ink2: #2E2B22;
+  --paper: #FAF8F3; --paper2: #F3F0E8; --paper3: #EAE6D8;
+  --muted: #7A7468; --border: #DDD8C8;
+  --red: #C0392B; --red-bg: #FDF0EF;
+  --green: #1A6B4A; --green-bg: #EDF7F2;
+  --amber: #B45309; --amber-bg: #FEF3C7;
+  --blue: #1E4FA3; --blue-bg: #EFF4FF;
+  --purple: #5B2D8E; --purple-bg: #F3EEFF;
+  --r: 8px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; overflow-x: hidden; }
+
+/* TOPBAR */
+.topbar { background: var(--ink); height: 56px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; position: fixed; top: 0; left: 0; right: 0; z-index: 200; border-bottom: 1px solid rgba(201,168,76,0.3); }
+.brand { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; color: var(--gold); letter-spacing: 0.04em; }
+.brand span { color: #fff; }
+.topbar-center { display: flex; gap: 4px; }
+.top-tab { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 500; color: #aaa; cursor: pointer; border: none; background: transparent; transition: all .2s; letter-spacing: 0.03em; }
+.top-tab:hover { color: #fff; background: rgba(255,255,255,0.07); }
+.top-tab.active { color: var(--gold); background: rgba(201,168,76,0.12); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.live-clock { font-size: 12px; color: #888; font-variant-numeric: tabular-nums; }
+.btn-new { background: var(--gold); color: var(--ink); border: none; padding: 7px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background .15s; }
+.btn-new:hover { background: var(--gold-dark); color: #fff; }
+
+/* LAYOUT */
+.layout { display: flex; padding-top: 56px; min-height: 100vh; }
+.sidebar { width: 220px; background: var(--ink2); flex-shrink: 0; position: fixed; top: 56px; left: 0; bottom: 0; overflow-y: auto; border-right: 1px solid rgba(201,168,76,0.15); }
+.nav-section { padding: 18px 16px 6px; font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; }
+.nav-item { display: flex; align-items: center; gap: 10px; padding: 10px 16px; font-size: 13px; color: #999; cursor: pointer; border-left: 3px solid transparent; transition: all .15s; }
+.nav-item:hover { color: #e0e0e0; background: rgba(255,255,255,0.04); }
+.nav-item.active { color: var(--gold); border-left-color: var(--gold); background: rgba(201,168,76,0.08); }
+.nav-icon { font-size: 15px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-badge { margin-left: auto; background: var(--red); color: #fff; font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 6px; min-width: 18px; text-align: center; }
+.nav-badge.gold { background: var(--gold); color: var(--ink); }
+.content { margin-left: 220px; flex: 1; padding: 24px; min-height: calc(100vh - 56px); }
+.page { display: none; }
+.page.active { display: block; }
+
+/* STATS */
+.stats-strip { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin-bottom: 22px; }
+.stat { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; position: relative; overflow: hidden; }
+.stat::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: var(--gold); opacity: 0.4; }
+.stat.urgent::before { background: var(--red); opacity: 1; }
+.stat.ready::before { background: var(--green); opacity: 1; }
+.stat-val { font-size: 26px; font-weight: 600; color: var(--ink); font-family: 'Cormorant Garamond', serif; }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* TABLE */
+.toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.toolbar-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; margin-right: 8px; }
+.filter-pill { padding: 5px 13px; border-radius: 20px; font-size: 12px; border: 1px solid var(--border); background: #fff; cursor: pointer; color: var(--muted); transition: all .15s; font-family: 'DM Sans', sans-serif; }
+.filter-pill:hover { border-color: var(--gold); color: var(--ink); }
+.filter-pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.filter-pill.red { border-color: #fca5a5; color: var(--red); }
+.filter-pill.red.active { background: var(--red); color: #fff; }
+.search-box { padding: 7px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; outline: none; width: 200px; background: #fff; font-family: 'DM Sans', sans-serif; margin-left: auto; }
+.search-box:focus { border-color: var(--gold); }
+.tbl-wrap { background: #fff; border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+th { background: var(--paper2); padding: 10px 14px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid var(--paper2); vertical-align: middle; }
+tr:last-child td { border-bottom: none; }
+tr:hover td { background: var(--paper); cursor: pointer; }
+.cell-name { font-weight: 600; }
+.cell-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.order-id { font-family: monospace; font-size: 12px; font-weight: 700; color: var(--gold-dark); background: var(--paper2); padding: 2px 6px; border-radius: 4px; }
+
+/* BADGES */
+.badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.b-urgent { background: var(--red-bg); color: var(--red); }
+.b-normal { background: var(--green-bg); color: var(--green); }
+.b-new { background: var(--blue-bg); color: var(--blue); }
+.b-design { background: var(--amber-bg); color: var(--amber); }
+.b-proof { background: var(--purple-bg); color: var(--purple); }
+.b-proof-sent { background: var(--purple-bg); color: var(--purple); }
+.b-confirmed { background: var(--green-bg); color: var(--green); }
+.b-printing { background: #EDE9FE; color: #5B21B6; }
+.b-ready { background: #D1FAE5; color: #065F46; }
+.b-delivered { background: var(--paper3); color: var(--muted); }
+.days-chip { font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+.dc-red { background: var(--red-bg); color: var(--red); }
+.dc-amber { background: var(--amber-bg); color: var(--amber); }
+.dc-green { background: var(--green-bg); color: var(--green); }
+.dc-gray { background: var(--paper3); color: var(--muted); }
+
+/* STATUS SELECT */
+.status-sel { border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: 'DM Sans', sans-serif; outline: none; background: var(--paper); cursor: pointer; }
+.status-sel:focus { border-color: var(--gold); }
+
+/* MODAL */
+.overlay { display: none; position: fixed; inset: 0; background: rgba(20,18,12,0.65); z-index: 300; align-items: center; justify-content: center; backdrop-filter: blur(2px); }
+.overlay.open { display: flex; }
+.modal { background: var(--paper); border-radius: 12px; width: 720px; max-height: 92vh; overflow-y: auto; border: 1px solid var(--border); box-shadow: 0 24px 80px rgba(0,0,0,0.3); }
+.modal-head { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: var(--paper); z-index: 1; }
+.modal-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; }
+.modal-close { background: none; border: none; font-size: 22px; color: var(--muted); cursor: pointer; line-height: 1; }
+.modal-body { padding: 20px 24px 24px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.fg { display: flex; flex-direction: column; gap: 5px; }
+.fg.full { grid-column: 1/-1; }
+.flabel { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.finput { padding: 9px 12px; border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; background: #fff; color: var(--ink); transition: border-color .15s; }
+.finput:focus { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(201,168,76,0.12); }
+textarea.finput { resize: vertical; min-height: 80px; line-height: 1.6; }
+.fsection { grid-column: 1/-1; font-size: 11px; font-weight: 700; color: var(--gold-dark); text-transform: uppercase; letter-spacing: 0.08em; padding-bottom: 8px; border-bottom: 1px solid var(--gold-light); margin-top: 6px; }
+.modal-foot { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; gap: 10px; justify-content: flex-end; background: var(--paper); }
+.btn { padding: 9px 20px; border-radius: 7px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; border: none; transition: all .15s; }
+.btn-primary { background: var(--gold); color: var(--ink); }
+.btn-primary:hover { background: var(--gold-dark); color: #fff; }
+.btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-ghost:hover { border-color: var(--ink); color: var(--ink); }
+.btn-danger { background: var(--red-bg); color: var(--red); border: 1px solid #fca5a5; }
+.btn-danger:hover { background: var(--red); color: #fff; }
+
+/* DETAIL PANEL */
+.detail-modal { background: var(--paper); border-radius: 12px; width: 580px; max-height: 92vh; overflow-y: auto; border: 1px solid var(--border); box-shadow: 0 24px 80px rgba(0,0,0,0.3); }
+.drow { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--paper2); font-size: 13px; gap: 12px; }
+.drow:last-child { border-bottom: none; }
+.dlabel { color: var(--muted); font-size: 12px; flex-shrink: 0; min-width: 140px; }
+.dvalue { color: var(--ink); font-weight: 500; text-align: right; }
+.commitment-box { background: var(--amber-bg); border: 1px solid #FDE68A; border-left: 4px solid var(--amber); border-radius: 8px; padding: 12px 14px; margin: 12px 0; }
+.matter-box { background: var(--green-bg); border: 1px solid #A7F3D0; border-left: 4px solid var(--green); border-radius: 8px; padding: 12px 14px; margin: 12px 0; white-space: pre-wrap; font-size: 13px; line-height: 1.7; }
+.status-pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.s-pill { padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500; border: 1px solid var(--border); cursor: pointer; transition: all .15s; background: #fff; color: var(--muted); font-family: 'DM Sans', sans-serif; }
+.s-pill.sel { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+/* DESIGNER CARDS */
+.card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+.job-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 16px; cursor: pointer; transition: all .2s; border-left: 4px solid var(--border); }
+.job-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); transform: translateY(-1px); }
+.job-card.urgent { border-left-color: var(--red); }
+.job-card.normal { border-left-color: var(--green); }
+.jc-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+.jc-id { font-size: 11px; font-family: monospace; color: var(--gold-dark); background: var(--paper2); padding: 2px 6px; border-radius: 4px; }
+.jc-name { font-size: 16px; font-weight: 600; margin-bottom: 3px; font-family: 'Cormorant Garamond', serif; }
+.jc-model { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+.jc-matter { font-size: 11px; color: #555; background: var(--paper2); border-radius: 6px; padding: 8px; line-height: 1.5; max-height: 55px; overflow: hidden; margin-bottom: 10px; }
+.jc-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 10px; border-top: 1px solid var(--paper2); font-size: 12px; color: var(--muted); }
+
+/* LANES */
+.lanes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.lane { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 16px; }
+.lane-hd { display: flex; align-items: center; gap: 8px; padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid var(--paper2); }
+.lane-tag { padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 800; letter-spacing: 0.05em; }
+.la-tag { background: var(--red-bg); color: var(--red); }
+.lb-tag { background: var(--green-bg); color: var(--green); }
+.lane-title { font-size: 14px; font-weight: 700; }
+.lane-cnt { margin-left: auto; font-size: 12px; color: var(--muted); }
+.q-item { background: var(--paper); border: 1px solid var(--border); border-radius: 7px; padding: 12px; margin-bottom: 8px; cursor: pointer; }
+.q-item:hover { border-color: var(--gold); }
+.qi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.qi-name { font-size: 13px; font-weight: 600; }
+.qi-date { font-size: 12px; font-weight: 700; color: var(--red); }
+.qi-details { font-size: 12px; color: var(--muted); display: flex; gap: 12px; }
+
+/* STOCK */
+.stock-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stock-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 16px; cursor: pointer; transition: all .15s; position: relative; }
+.stock-card:hover { border-color: var(--gold); box-shadow: 0 2px 8px rgba(201,168,76,0.15); }
+.stock-card.low-stock { border-color: var(--red); }
+.stock-num { font-size: 11px; font-family: monospace; font-weight: 700; color: var(--gold-dark); margin-bottom: 8px; }
+.stock-qty { font-size: 28px; font-weight: 600; font-family: 'Cormorant Garamond', serif; color: var(--ink); }
+.stock-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.stock-vendor { font-size: 12px; color: var(--muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--paper2); }
+.stock-prices { display: flex; justify-content: space-between; font-size: 12px; margin-top: 6px; }
+.price-sell { color: var(--green); font-weight: 600; }
+.price-dealer { color: var(--muted); }
+.low-badge { position: absolute; top: 10px; right: 10px; background: var(--red-bg); color: var(--red); font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 10px; }
+
+/* SALES */
+.report-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+.rep-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 16px; }
+.rep-val { font-size: 24px; font-weight: 600; font-family: 'Cormorant Garamond', serif; }
+.rep-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* WHATSAPP */
+.wa-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 18px; margin-bottom: 14px; }
+.wa-title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+.wa-sub { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+.wa-msg { background: #E8F5E3; border: 1px solid #C8E6C9; border-radius: 10px; padding: 14px 16px; font-size: 12.5px; line-height: 1.8; font-family: monospace; color: var(--ink2); white-space: pre-wrap; margin-bottom: 10px; }
+.wa-actions { display: flex; gap: 8px; }
+.btn-copy { background: var(--paper2); border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; color: var(--ink); transition: all .15s; }
+.btn-copy:hover { background: var(--paper3); }
+.btn-copy.copied { background: var(--green-bg); color: var(--green); border-color: #A7F3D0; }
+
+/* ALERTS */
+.alert { border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; border-left: 4px solid; }
+.alert-red { background: var(--red-bg); border-color: var(--red); color: var(--red); }
+.alert-amber { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+.alert-green { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+
+/* ESTIMATION */
+.estimation-form { background: #fff; border: 1px solid var(--border); border-radius: var(--r); padding: 24px; max-width: 700px; }
+.est-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--gold-light); }
+.est-brand { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; color: var(--gold-dark); }
+.est-brand-sub { font-size: 12px; color: var(--muted); }
+.est-label { font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: 0.05em; }
+.est-date { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.est-table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+.est-table th { background: var(--paper2); padding: 9px 12px; font-size: 12px; font-weight: 700; text-align: left; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.04em; }
+.est-table td { padding: 9px 12px; font-size: 13px; border: 1px solid var(--border); }
+.est-table td input { border: none; outline: none; font-size: 13px; font-family: 'DM Sans', sans-serif; background: transparent; width: 100%; }
+.est-totals { display: flex; justify-content: flex-end; }
+.est-total-box { width: 240px; }
+.est-total-row { display: flex; justify-content: space-between; padding: 7px 0; font-size: 13px; border-bottom: 1px solid var(--paper2); }
+.est-total-row.bold { font-weight: 700; font-size: 15px; border-bottom: 2px solid var(--ink); }
+.payment-modes { display: flex; gap: 10px; margin-top: 16px; align-items: center; }
+.payment-chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--border); font-size: 12px; cursor: pointer; color: var(--muted); transition: all .15s; }
+.payment-chip.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.empty-state { text-align: center; padding: 48px; color: var(--muted); font-size: 14px; }
+.empty-icon { font-size: 36px; margin-bottom: 10px; }
+
+/* API STATUS */
+.api-status { position: fixed; bottom: 16px; right: 16px; padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; z-index: 999; display: flex; align-items: center; gap: 6px; transition: all .3s; }
+.api-online { background: var(--green-bg); color: var(--green); border: 1px solid #A7F3D0; }
+.api-offline { background: var(--red-bg); color: var(--red); border: 1px solid #fca5a5; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">RAJ <span>MULTI COLOR PRINT</span></div>
+  <div class="topbar-center">
+    <button class="top-tab active" onclick="nav('orders')">Orders</button>
+    <button class="top-tab" onclick="nav('designer')">Designer</button>
+    <button class="top-tab" onclick="nav('print')">Print</button>
+    <button class="top-tab" onclick="nav('stock')">Stock</button>
+    <button class="top-tab" onclick="nav('estimation')">Estimation</button>
+    <button class="top-tab" onclick="nav('sales')">Sales</button>
+    <button class="top-tab" onclick="nav('whatsapp')">WhatsApp</button>
+  </div>
+  <div class="topbar-right">
+    <div class="live-clock" id="clock"></div>
+    <button class="btn-new" onclick="openNewOrder()">+ New Order</button>
+  </div>
+</div>
+
+<div class="layout">
+<div class="sidebar">
+  <div class="nav-section">Overview</div>
+  <div class="nav-item active" id="snav-orders" onclick="nav('orders')"><span class="nav-icon">📋</span> All Orders <span class="nav-badge" id="nb-orders">0</span></div>
+  <div class="nav-section">Workflow</div>
+  <div class="nav-item" id="snav-designer" onclick="nav('designer')"><span class="nav-icon">✏️</span> Designer Queue <span class="nav-badge" id="nb-designer">0</span></div>
+  <div class="nav-item" id="snav-print" onclick="nav('print')"><span class="nav-icon">🖨️</span> Print Queue <span class="nav-badge" id="nb-print">0</span></div>
+  <div class="nav-section">Inventory</div>
+  <div class="nav-item" id="snav-stock" onclick="nav('stock')"><span class="nav-icon">📦</span> Stock <span class="nav-badge gold" id="nb-stock">0</span></div>
+  <div class="nav-section">Finance</div>
+  <div class="nav-item" id="snav-estimation" onclick="nav('estimation')"><span class="nav-icon">🧾</span> Estimation</div>
+  <div class="nav-item" id="snav-sales" onclick="nav('sales')"><span class="nav-icon">📊</span> Sales Report</div>
+  <div class="nav-section">Tools</div>
+  <div class="nav-item" id="snav-whatsapp" onclick="nav('whatsapp')"><span class="nav-icon">💬</span> WhatsApp Msgs</div>
+</div>
+
+<div class="content">
+
+<!-- PAGE: ORDERS -->
+<div class="page active" id="page-orders">
+  <div class="stats-strip">
+    <div class="stat"><div class="stat-val" id="s-active">0</div><div class="stat-lbl">Active Orders</div></div>
+    <div class="stat urgent"><div class="stat-val" id="s-urgent" style="color:var(--red)">0</div><div class="stat-lbl">Urgent (Lane A)</div></div>
+    <div class="stat"><div class="stat-val" id="s-design" style="color:var(--amber)">0</div><div class="stat-lbl">With Designer</div></div>
+    <div class="stat"><div class="stat-val" id="s-printing" style="color:#5B21B6">0</div><div class="stat-lbl">In Printing</div></div>
+    <div class="stat ready"><div class="stat-val" id="s-ready" style="color:var(--green)">0</div><div class="stat-lbl">Ready Pickup</div></div>
+    <div class="stat"><div class="stat-val" id="s-balance" style="color:var(--red)">₹0</div><div class="stat-lbl">Balance Due</div></div>
+  </div>
+  <div id="overdue-alert"></div>
+  <div class="toolbar">
+    <span class="toolbar-title">Order Register</span>
+    <button class="filter-pill active" onclick="setFilter('all',this)">All Active</button>
+    <button class="filter-pill" onclick="setFilter('New',this)">New</button>
+    <button class="filter-pill" onclick="setFilter('Design',this)">Design</button>
+    <button class="filter-pill" onclick="setFilter('Proof Sent',this)">Proof</button>
+    <button class="filter-pill" onclick="setFilter('Printing',this)">Printing</button>
+    <button class="filter-pill" onclick="setFilter('Ready',this)">Ready</button>
+    <button class="filter-pill" onclick="setFilter('Delivered',this)">Delivered</button>
+    <button class="filter-pill red" onclick="setFilter('urgent',this)">🔴 Urgent</button>
+    <input class="search-box" type="text" id="search" placeholder="Search name / order ID…" oninput="renderOrders()">
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Order ID</th><th>Customer</th><th>Type</th><th>Card</th><th>Qty</th><th>Amount</th><th>Delivery</th><th>Priority</th><th>Status</th><th>Handler</th><th>Update</th></tr></thead>
+      <tbody id="orders-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE: DESIGNER -->
+<div class="page" id="page-designer">
+  <div class="toolbar"><span class="toolbar-title">Designer Queue</span></div>
+  <div class="alert alert-amber" style="margin-bottom:16px">⚠️ Red border = <strong>Urgent — complete first.</strong> Send proof as <strong>PDF</strong>, never a phone photo. Urgent: 4hr turnaround. Normal: next business day.</div>
+  <div class="card-grid" id="designer-grid"></div>
+</div>
+
+<!-- PAGE: PRINT QUEUE -->
+<div class="page" id="page-print">
+  <div class="toolbar"><span class="toolbar-title">Print Queue</span></div>
+  <div class="alert alert-red" style="margin-bottom:16px">🔴 <strong>Lane A first — always.</strong> Complete all Lane A orders before starting any Lane B. Check every morning.</div>
+  <div class="lanes">
+    <div class="lane">
+      <div class="lane-hd"><span class="lane-tag la-tag">LANE A</span><div class="lane-title" style="color:var(--red)">Urgent Orders</div><span class="lane-cnt" id="la-cnt">0</span></div>
+      <div id="lane-a"></div>
+    </div>
+    <div class="lane">
+      <div class="lane-hd"><span class="lane-tag lb-tag">LANE B</span><div class="lane-title" style="color:var(--green)">Normal Orders</div><span class="lane-cnt" id="lb-cnt">0</span></div>
+      <div id="lane-b"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: STOCK -->
+<div class="page" id="page-stock">
+  <div class="toolbar">
+    <span class="toolbar-title">Stock Inventory</span>
+    <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:auto">+ Add Stock</button>
+  </div>
+  <div id="low-stock-alert"></div>
+  <div class="stock-grid" id="stock-grid"></div>
+</div>
+
+<!-- PAGE: ESTIMATION -->
+<div class="page" id="page-estimation">
+  <div class="toolbar"><span class="toolbar-title">Bill Estimation</span></div>
+  <div class="estimation-form">
+    <div class="est-header">
+      <div><div class="est-brand">Raj Multi Color Print</div><div class="est-brand-sub">ESTD 1983 · Wedding Cards & Luxury Invitations · Kakinada</div></div>
+      <div style="text-align:right"><div class="est-label">ESTIMATION</div><div class="est-date" id="est-date"></div></div>
+    </div>
+    <div class="form-grid" style="margin-bottom:16px">
+      <div class="fg"><div class="flabel">Customer Name *</div><input class="finput" id="e-name" placeholder="Full name" oninput="calcEst()"></div>
+      <div class="fg"><div class="flabel">Phone Number *</div><input class="finput" id="e-phone" placeholder="WhatsApp number" oninput="calcEst()"></div>
+      <div class="fg"><div class="flabel">Handled By *</div>
+        <select class="finput" id="e-handler"><option value="">Select</option><option>Brother 1</option><option>Brother 2</option></select>
+      </div>
+      <div class="fg"><div class="flabel">Priority</div>
+        <select class="finput" id="e-priority"><option value="Normal">Normal (Lane B)</option><option value="Urgent">Urgent (Lane A)</option></select>
+      </div>
+    </div>
+    <table class="est-table">
+      <thead><tr><th>#</th><th>Description</th><th>Card No.</th><th>Price (₹)</th><th>Qty</th><th>Amount (₹)</th></tr></thead>
+      <tbody id="est-rows"></tbody>
+    </table>
+    <button onclick="addEstRow()" style="font-size:12px;color:var(--gold-dark);background:none;border:1px dashed var(--gold-light);padding:7px 16px;border-radius:6px;cursor:pointer;margin-bottom:16px;font-family:'DM Sans',sans-serif">+ Add Item</button>
+    <div class="est-totals">
+      <div class="est-total-box">
+        <div class="est-total-row"><span>Subtotal</span><span id="et-sub">₹0</span></div>
+        <div class="est-total-row bold"><span>TOTAL</span><span id="et-total">₹0</span></div>
+        <div style="margin-top:12px">
+          <div class="flabel" style="margin-bottom:5px">Advance Amount (₹)</div>
+          <input class="finput" type="number" id="e-advance" placeholder="0" oninput="calcEst()">
+        </div>
+        <div class="est-total-row" style="margin-top:8px;color:var(--red);font-weight:600"><span>Balance Due</span><span id="et-balance">₹0</span></div>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="flabel" style="margin-bottom:8px">Payment Mode</div>
+      <div class="payment-modes">
+        <div class="payment-chip" onclick="togglePayment(this,'Cash')">Cash</div>
+        <div class="payment-chip" onclick="togglePayment(this,'PhonePe')">PhonePe</div>
+        <div class="payment-chip" onclick="togglePayment(this,'Credit')">Credit</div>
+      </div>
+    </div>
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px">
+      <button class="btn btn-primary" onclick="convertToOrder()">Convert to Work Order →</button>
+      <button class="btn btn-ghost" onclick="printEst()">Print Estimation</button>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: SALES -->
+<div class="page" id="page-sales">
+  <div class="toolbar"><span class="toolbar-title">Sales Report</span></div>
+  <div class="report-summary">
+    <div class="rep-card"><div class="rep-val" id="r-total">₹0</div><div class="rep-lbl">Total Revenue Billed</div></div>
+    <div class="rep-card"><div class="rep-val" id="r-advance">₹0</div><div class="rep-lbl">Advance Collected</div></div>
+    <div class="rep-card"><div class="rep-val" id="r-balance" style="color:var(--red)">₹0</div><div class="rep-lbl">Balance Outstanding</div></div>
+    <div class="rep-card"><div class="rep-val" id="r-orders">0</div><div class="rep-lbl">Total Orders</div></div>
+  </div>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Date</th><th>Order ID</th><th>Customer</th><th>Item</th><th>Qty</th><th>Total</th><th>Advance</th><th>Balance</th><th>Payment</th><th>Status</th></tr></thead>
+      <tbody id="sales-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE: WHATSAPP -->
+<div class="page" id="page-whatsapp">
+  <div class="toolbar"><span class="toolbar-title">WhatsApp Message Templates</span></div>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Send all messages from your dedicated <strong>Raj Screens WhatsApp Business number</strong> — not personal numbers.</p>
+  <div class="wa-card">
+    <div class="wa-title">📩 Order Booking Confirmation</div>
+    <div class="wa-sub">Send immediately after customer books and pays advance.</div>
+    <div class="wa-msg">నమస్కారం! 🙏
+
+మీ order confirm అయింది. వివరాలు:
+
+👤 పేరు: [CUSTOMER NAME]
+📋 Order ID: [ORDER ID]
+🃏 Card: [CARD MODEL] — [QTY] cards
+💰 Total: ₹[TOTAL] | Advance: ₹[ADVANCE]
+💳 Balance Due: ₹[BALANCE]
+📅 Delivery by: [DATE]
+
+మీ proof [X] గంటల్లో WhatsApp లో పంపుతాం.
+
+— Raj Multi Color Print ✨
+📍 Kakinada | ESTD 1983</div>
+    <div class="wa-actions"><button class="btn-copy" onclick="copyWA(this)">Copy Telugu</button></div>
+  </div>
+  <div class="wa-card">
+    <div class="wa-title">🖼️ Proof Ready</div>
+    <div class="wa-sub">Send when designer completes proof. Always attach the PDF proof file.</div>
+    <div class="wa-msg">నమస్కారం! 🙏
+
+మీ వివాహ కార్డు proof ready అయింది.
+
+జతచేసిన PDF చూసి reply చేయండి:
+✅ సరిగ్గా ఉంటే — *OK* అని reply చేయండి
+✍️ మార్పులు ఉంటే — ఏమి మార్చాలో clearly list చేయండి
+
+మేము 4 గంటల్లో corrections చేసి మళ్ళీ పంపుతాం.
+
+— Raj Multi Color Print | 📞 [YOUR NUMBER]</div>
+    <div class="wa-actions"><button class="btn-copy" onclick="copyWA(this)">Copy Telugu</button></div>
+  </div>
+  <div class="wa-card">
+    <div class="wa-title">🖨️ Printing Started</div>
+    <div class="wa-sub">Send when order moves to printing.</div>
+    <div class="wa-msg">నమస్కారం! 🙏
+
+మీ వివాహ కార్డులు printing start అయ్యాయి! 🎉
+
+📅 Delivery date: [DATE]
+మీరు మా shop కి వచ్చి collect చేసుకోవచ్చు.
+💰 Balance: ₹[BALANCE]
+
+— Raj Multi Color Print | ESTD 1983</div>
+    <div class="wa-actions"><button class="btn-copy" onclick="copyWA(this)">Copy</button></div>
+  </div>
+  <div class="wa-card">
+    <div class="wa-title">✅ Cards Ready for Pickup</div>
+    <div class="wa-sub">Send when cards are packed and ready.</div>
+    <div class="wa-msg">నమస్కారం! 🙏 శుభవార్త!
+
+మీ వివాహ కార్డులు ready అయ్యాయి! ✨
+
+దయచేసి మా shop కి వచ్చి collect చేసుకోండి.
+⏰ Open: 10 AM – 7 PM, Monday–Saturday
+
+💰 Balance Due: ₹[BALANCE]
+📍 [YOUR SHOP ADDRESS], Kakinada
+
+మీ శుభకార్యానికి శుభాకాంక్షలు! 🌸
+
+— Raj Multi Color Print (ESTD 1983)</div>
+    <div class="wa-actions"><button class="btn-copy" onclick="copyWA(this)">Copy</button></div>
+  </div>
+  <div class="wa-card">
+    <div class="wa-title">🔔 Balance Payment Reminder</div>
+    <div class="wa-sub">Send 2 days before delivery if balance not paid.</div>
+    <div class="wa-msg">నమస్కారం! 🙏
+
+మీ order [ORDER ID] delivery [DATE] కి scheduled అయింది.
+
+💰 Balance Due: ₹[BALANCE]
+
+Delivery సమయంలో payment తీసుకురండి.
+Cash / PhonePe accept చేస్తాం.
+
+— Raj Multi Color Print | 📞 [YOUR NUMBER]</div>
+    <div class="wa-actions"><button class="btn-copy" onclick="copyWA(this)">Copy</button></div>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /layout -->
+
+<!-- NEW ORDER MODAL -->
+<div class="overlay" id="order-overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-title-txt">New Work Order</div>
+      <button class="modal-close" onclick="closeNewOrder()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="fsection">Customer Details</div>
+        <div class="fg"><div class="flabel">Customer Name *</div><input class="finput" id="m-name" placeholder="Full name"></div>
+        <div class="fg"><div class="flabel">WhatsApp Number *</div><input class="finput" id="m-phone" placeholder="10-digit number" type="tel"></div>
+        <div class="fsection">Order Details</div>
+        <div class="fg"><div class="flabel">Order Type *</div>
+          <select class="finput" id="m-type"><option value="">Select type</option><option>Readymade</option><option>Semi-custom</option><option>Fully customised</option></select>
+        </div>
+        <div class="fg"><div class="flabel">Card No. / Model</div><input class="finput" id="m-model" placeholder="e.g. R103 or Lotus Premium"></div>
+        <div class="fg"><div class="flabel">Quantity *</div><input class="finput" type="number" id="m-qty" placeholder="e.g. 500" oninput="calcModalAmt()"></div>
+        <div class="fg"><div class="flabel">Price per piece (₹) *</div><input class="finput" type="number" id="m-price" placeholder="e.g. 22" oninput="calcModalAmt()"></div>
+        <div class="fg"><div class="flabel">Total Amount (₹)</div><input class="finput" id="m-amount" placeholder="Auto-calculated" readonly style="background:var(--paper2)"></div>
+        <div class="fg"><div class="flabel">Advance Paid (₹)</div><input class="finput" type="number" id="m-advance" placeholder="0"></div>
+        <div class="fg"><div class="flabel">Payment Mode</div>
+          <select class="finput" id="m-payment"><option>Cash</option><option>PhonePe</option><option>Credit</option><option>Split</option></select>
+        </div>
+        <div class="fg"><div class="flabel">Delivery Date *</div><input class="finput" type="date" id="m-delivery"></div>
+        <div class="fg"><div class="flabel">Priority *</div>
+          <select class="finput" id="m-priority"><option value="Normal">Normal (Lane B)</option><option value="Urgent">Urgent (Lane A)</option></select>
+        </div>
+        <div class="fg"><div class="flabel">Handled By *</div>
+          <select class="finput" id="m-handler"><option value="">Select</option><option>Brother 1</option><option>Brother 2</option></select>
+        </div>
+        <div class="fsection">Requirements (for Designer)</div>
+        <div class="fg full"><div class="flabel">Special Requirements</div><input class="finput" id="m-req" placeholder="e.g. Telugu + English, Gold foil, 9×9 size, Box cover…"></div>
+        <div class="fg full"><div class="flabel">Wedding Card Matter (full text for designer)</div><textarea class="finput" id="m-matter" placeholder="Bride name, Groom name, Parents names, Wedding date, Venue, Muhurtham time, Other functions…"></textarea></div>
+        <div class="fsection">Commitments & Notes</div>
+        <div class="fg full"><div class="flabel">Special Commitments Given ⚠️</div><textarea class="finput" id="m-commit" placeholder="e.g. Promised 50 extra cards free, agreed ₹1/card discount for referral, special delivery time 9 AM…" style="min-height:60px"></textarea></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeNewOrder()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveOrder()">Save Work Order</button>
+    </div>
+  </div>
+</div>
+
+<!-- ORDER DETAIL OVERLAY -->
+<div class="overlay" id="detail-overlay">
+  <div class="detail-modal" id="detail-content"></div>
+</div>
+
+<!-- STOCK ENTRY OVERLAY -->
+<div class="overlay" id="stock-overlay">
+  <div class="modal" style="width:480px">
+    <div class="modal-head"><div class="modal-title">Add / Update Stock</div><button class="modal-close" onclick="closeStock()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="fg"><div class="flabel">Card Number *</div><input class="finput" id="sk-num" placeholder="e.g. R103"></div>
+        <div class="fg"><div class="flabel">Vendor Name *</div><input class="finput" id="sk-vendor" placeholder="e.g. Novelty Cards Delhi"></div>
+        <div class="fg"><div class="flabel">Stock Arrived (qty) *</div><input class="finput" type="number" id="sk-qty" placeholder="e.g. 1000"></div>
+        <div class="fg"><div class="flabel">Dealer Price (₹) — hidden</div><input class="finput" type="number" id="sk-dealer" placeholder="e.g. 10"></div>
+        <div class="fg"><div class="flabel">Selling Price with printing (₹) *</div><input class="finput" type="number" id="sk-sell" placeholder="e.g. 22"></div>
+        <div class="fg"><div class="flabel">Price without printing (₹)</div><input class="finput" type="number" id="sk-nop" placeholder="e.g. 18"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeStock()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveStock()">Add to Stock</button>
+    </div>
+  </div>
+</div>
+
+<!-- API STATUS INDICATOR -->
+<div class="api-status api-offline" id="api-status">
+  <div class="dot"></div><span id="api-label">Connecting…</span>
+</div>
+
+<script>
+// ─── API CONFIG ────────────────────────────────────────────────────────────
+const API = 'http://localhost:5050/api';
+
+async function apiFetch(path, options={}) {
+  const res = await fetch(API + path, {
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+let orders = [];
+let stock  = [];
+let activeFilter = 'all';
+let estRows = [];
+let selectedPayments = [];
+let editingId = null;
+const STATUSES = ['New','Design','Proof Sent','Confirmed','Printing','Ready','Delivered'];
+
+// ─── UTILS ─────────────────────────────────────────────────────────────────
+function fmtDate(d){ if(!d) return '—'; return new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}); }
+function daysLeft(d){ const t=new Date(); t.setHours(0,0,0,0); return Math.round((new Date(d)-t)/86400000); }
+function fmtINR(n){ return '₹'+parseInt(n||0).toLocaleString('en-IN'); }
+
+// ─── API STATUS ─────────────────────────────────────────────────────────────
+function setApiStatus(online) {
+  const el = document.getElementById('api-status');
+  el.className = 'api-status ' + (online ? 'api-online' : 'api-offline');
+  document.getElementById('api-label').textContent = online ? 'Backend Connected' : 'Backend Offline';
+}
+
+async function checkHealth() {
+  try {
+    await fetch(API + '/stats');
+    setApiStatus(true);
+  } catch {
+    setApiStatus(false);
+  }
+}
+
+// ─── LOAD DATA ──────────────────────────────────────────────────────────────
+async function loadOrders() {
+  try {
+    orders = await apiFetch('/orders');
+  } catch(e) {
+    console.error('Failed to load orders', e);
+  }
+}
+
+async function loadStock() {
+  try {
+    stock = await apiFetch('/stock');
+  } catch(e) {
+    console.error('Failed to load stock', e);
+  }
+}
+
+// ─── NAVIGATION ─────────────────────────────────────────────────────────────
+async function nav(page) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.top-tab,.nav-item').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  const topTabs = document.querySelectorAll('.top-tab');
+  const pages = ['orders','designer','print','stock','estimation','sales','whatsapp'];
+  const idx = pages.indexOf(page);
+  if(idx>=0) topTabs[idx].classList.add('active');
+  const snav = document.getElementById('snav-'+page);
+  if(snav) snav.classList.add('active');
+  if(page==='orders')     { await loadOrders(); renderOrders(); }
+  if(page==='designer')   { await loadOrders(); renderDesigner(); }
+  if(page==='print')      { await loadOrders(); renderPrint(); }
+  if(page==='stock')      { await loadStock(); renderStock(); }
+  if(page==='sales')      { await loadOrders(); renderSales(); }
+  if(page==='estimation') initEstimation();
+}
+
+// ─── CLOCK ──────────────────────────────────────────────────────────────────
+function updateClock(){
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─── STATS ──────────────────────────────────────────────────────────────────
+async function updateStats() {
+  try {
+    const s = await apiFetch('/stats');
+    document.getElementById('s-active').textContent = s.active;
+    document.getElementById('s-urgent').textContent = s.urgent;
+    document.getElementById('s-design').textContent = s.design;
+    document.getElementById('s-printing').textContent = s.printing;
+    document.getElementById('s-ready').textContent = s.ready;
+    document.getElementById('s-balance').textContent = fmtINR(s.balance);
+    document.getElementById('nb-orders').textContent = s.active;
+    document.getElementById('nb-designer').textContent = s.design;
+    document.getElementById('nb-print').textContent = s.printing;
+  } catch(e) {
+    console.error('Stats error', e);
+  }
+}
+
+// ─── ORDERS PAGE ────────────────────────────────────────────────────────────
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-pill').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');
+  renderOrders();
+}
+
+function renderOrders() {
+  const q = document.getElementById('search').value.toLowerCase();
+  let list = orders.filter(o => {
+    if(activeFilter==='all')    return o.status !== 'Delivered';
+    if(activeFilter==='urgent') return o.priority === 'Urgent' && o.status !== 'Delivered';
+    return o.status === activeFilter;
+  });
+  if(q) list = list.filter(o => o.name.toLowerCase().includes(q) || o.id.toLowerCase().includes(q));
+
+  const overdue = list.filter(o=>o.delivery && daysLeft(o.delivery)<0 && o.status!=='Delivered');
+  const oa = document.getElementById('overdue-alert');
+  oa.innerHTML = overdue.length
+    ? `<div class="alert alert-red">🚨 <strong>${overdue.length} OVERDUE order(s):</strong> ${overdue.map(o=>`${o.id} (${o.name})`).join(', ')}</div>` : '';
+
+  const tbody = document.getElementById('orders-tbody');
+  if(!list.length){ tbody.innerHTML='<tr><td colspan="11"><div class="empty-state">No orders match this filter</div></td></tr>'; return; }
+  tbody.innerHTML = list.map(o=>{
+    const dl = daysLeft(o.delivery);
+    const dlCls = dl<0?'dc-red':dl<=2?'dc-red':dl<=4?'dc-amber':'dc-green';
+    const dlTxt = dl<0?`${Math.abs(dl)}d overdue`:dl===0?'Today':dl===1?'Tomorrow':`${dl}d left`;
+    const bal = parseInt(o.amount||0)-parseInt(o.advance||0);
+    return `<tr onclick="openDetail('${o.id}')">
+      <td><span class="order-id">${o.id}</span></td>
+      <td><div class="cell-name">${o.name}</div><div class="cell-sub">${o.phone}</div></td>
+      <td style="font-size:12px">${o.type}</td>
+      <td style="font-size:12px">${o.model||'—'}</td>
+      <td>${parseInt(o.qty||0).toLocaleString('en-IN')}</td>
+      <td><div>${fmtINR(o.amount)}</div><div class="cell-sub" style="color:var(--red)">Bal: ${fmtINR(bal)}</div></td>
+      <td><div>${fmtDate(o.delivery)}</div><div><span class="days-chip ${dlCls}">${dlTxt}</span></div></td>
+      <td>${o.priority==='Urgent'?'<span class="badge b-urgent">Lane A</span>':'<span class="badge b-normal">Lane B</span>'}</td>
+      <td><span class="badge b-${o.status.toLowerCase().replace(' ','-')}">${o.status}</span></td>
+      <td style="font-size:12px;color:var(--muted)">${o.handler||'—'}</td>
+      <td onclick="event.stopPropagation()">
+        <select class="status-sel" onchange="quickStatus('${o.id}',this.value)">
+          ${STATUSES.map(s=>`<option ${s===o.status?'selected':''}>${s}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+  updateStats();
+}
+
+async function quickStatus(id, status) {
+  try {
+    await apiFetch(`/orders/${id}/status`, { method:'PATCH', body: JSON.stringify({status}) });
+    const o = orders.find(x=>x.id===id);
+    if(o) o.status = status;
+    renderOrders();
+    updateStats();
+  } catch(e) { alert('Failed to update status'); }
+}
+
+// ─── ORDER DETAIL ────────────────────────────────────────────────────────────
+function openDetail(id) {
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+  const dl = daysLeft(o.delivery);
+  const dlTxt = dl<0?`${Math.abs(dl)} days OVERDUE`:dl===0?'Due TODAY':`${dl} days left`;
+  const dlColor = dl<=0?'var(--red)':dl<=2?'var(--amber)':'var(--green)';
+  const bal = parseInt(o.amount||0)-parseInt(o.advance||0);
+  document.getElementById('detail-content').innerHTML = `
+    <div class="modal-head">
+      <div>
+        <div style="font-size:11px;font-family:monospace;color:var(--gold-dark);margin-bottom:4px">${o.id}</div>
+        <div class="modal-title">${o.name}</div>
+        <div style="font-size:13px;color:var(--muted)">${o.phone}</div>
+      </div>
+      <button class="modal-close" onclick="closeDetail()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+        ${o.priority==='Urgent'?'<span class="badge b-urgent">Lane A — Urgent</span>':'<span class="badge b-normal">Lane B — Normal</span>'}
+        <span class="badge b-${o.status.toLowerCase().replace(' ','-')}">${o.status}</span>
+        <span style="font-size:12px;font-weight:700;color:${dlColor}">${dlTxt}</span>
+      </div>
+      ${o.commitments?`<div class="commitment-box"><div style="font-size:11px;font-weight:700;color:var(--amber);margin-bottom:6px">⚠️ SPECIAL COMMITMENTS — DO NOT MISS</div><div style="font-size:13px;color:var(--ink);line-height:1.6">${o.commitments}</div></div>`:''}
+      <div style="margin-bottom:14px">
+        <div class="flabel" style="margin-bottom:8px">Update Status</div>
+        <div class="status-pills">
+          ${STATUSES.map(s=>`<button class="s-pill ${s===o.status?'sel':''}" onclick="updateDetailStatus('${o.id}','${s}')">${s}</button>`).join('')}
+        </div>
+      </div>
+      <div style="background:var(--paper2);border-radius:8px;padding:14px;margin-bottom:12px">
+        ${drow('Card Model',o.model||'—')}
+        ${drow('Type',o.type)}
+        ${drow('Quantity',parseInt(o.qty||0).toLocaleString('en-IN')+' cards')}
+        ${drow('Total Amount',fmtINR(o.amount))}
+        ${drow('Advance Paid',fmtINR(o.advance))}
+        ${drow('Balance Due','<span style="color:var(--red);font-weight:700">'+fmtINR(bal)+'</span>')}
+        ${drow('Payment Mode',o.payment||'—')}
+        ${drow('Delivery Date',fmtDate(o.delivery))}
+        ${drow('Handled By',o.handler||'—')}
+      </div>
+      ${o.req?`<div style="margin-bottom:12px"><div class="flabel" style="margin-bottom:5px">Requirements</div><div style="font-size:13px;color:var(--ink);background:var(--blue-bg);padding:10px 12px;border-radius:7px;line-height:1.6">${o.req}</div></div>`:''}
+      ${o.matter?`<div class="matter-box"><div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:6px">📋 WEDDING CARD MATTER</div>${o.matter}</div>`:''}
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn btn-ghost" onclick="editOrder('${o.id}')">Edit Order</button>
+        <button class="btn btn-danger" onclick="deleteOrder('${o.id}')">Delete</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('detail-overlay').classList.add('open');
+}
+function drow(lbl,val){ return `<div class="drow"><span class="dlabel">${lbl}</span><span class="dvalue">${val}</span></div>`; }
+function closeDetail(){ document.getElementById('detail-overlay').classList.remove('open'); }
+
+async function updateDetailStatus(id, status) {
+  try {
+    await apiFetch(`/orders/${id}/status`, { method:'PATCH', body: JSON.stringify({status}) });
+    const o = orders.find(x=>x.id===id);
+    if(o) o.status = status;
+    openDetail(id);
+    updateStats();
+  } catch(e) { alert('Failed to update status'); }
+}
+
+async function deleteOrder(id) {
+  if(!confirm('Delete this order? This cannot be undone.')) return;
+  try {
+    await apiFetch(`/orders/${id}`, { method:'DELETE' });
+    orders = orders.filter(o=>o.id!==id);
+    closeDetail();
+    renderOrders();
+    updateStats();
+  } catch(e) { alert('Failed to delete order'); }
+}
+
+function editOrder(id) {
+  closeDetail();
+  const o = orders.find(x=>x.id===id);
+  if(!o) return;
+  editingId = id;
+  document.getElementById('modal-title-txt').textContent = 'Edit Order — '+o.id;
+  document.getElementById('m-name').value = o.name;
+  document.getElementById('m-phone').value = o.phone;
+  document.getElementById('m-type').value = o.type;
+  document.getElementById('m-model').value = o.model||'';
+  document.getElementById('m-qty').value = o.qty;
+  document.getElementById('m-price').value = o.price||'';
+  document.getElementById('m-amount').value = o.amount;
+  document.getElementById('m-advance').value = o.advance||'';
+  document.getElementById('m-payment').value = o.payment||'Cash';
+  document.getElementById('m-delivery').value = o.delivery;
+  document.getElementById('m-priority').value = o.priority;
+  document.getElementById('m-handler').value = o.handler;
+  document.getElementById('m-req').value = o.req||'';
+  document.getElementById('m-matter').value = o.matter||'';
+  document.getElementById('m-commit').value = o.commitments||'';
+  document.getElementById('order-overlay').classList.add('open');
+}
+
+// ─── NEW ORDER MODAL ─────────────────────────────────────────────────────────
+function openNewOrder() {
+  editingId = null;
+  document.getElementById('modal-title-txt').textContent = 'New Work Order';
+  ['m-name','m-phone','m-model','m-req','m-matter','m-commit'].forEach(id=>document.getElementById(id).value='');
+  ['m-qty','m-price','m-advance','m-amount'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('m-type').value = '';
+  document.getElementById('m-payment').value = 'Cash';
+  document.getElementById('m-priority').value = 'Normal';
+  document.getElementById('m-handler').value = '';
+  document.getElementById('m-delivery').min = new Date().toISOString().split('T')[0];
+  document.getElementById('order-overlay').classList.add('open');
+}
+function closeNewOrder(){ document.getElementById('order-overlay').classList.remove('open'); }
+function calcModalAmt(){
+  const qty = parseInt(document.getElementById('m-qty').value)||0;
+  const price = parseFloat(document.getElementById('m-price').value)||0;
+  document.getElementById('m-amount').value = qty*price ? (qty*price).toFixed(0) : '';
+}
+
+async function saveOrder() {
+  const name = document.getElementById('m-name').value.trim();
+  const phone = document.getElementById('m-phone').value.trim();
+  const type = document.getElementById('m-type').value;
+  const qty = document.getElementById('m-qty').value;
+  const delivery = document.getElementById('m-delivery').value;
+  const handler = document.getElementById('m-handler').value;
+  if(!name||!phone||!type||!qty||!delivery||!handler){ alert('Please fill all required fields (*)'); return; }
+  const model = document.getElementById('m-model').value.trim();
+  const price = parseFloat(document.getElementById('m-price').value)||0;
+  const amount = price*parseInt(qty) || parseInt(document.getElementById('m-amount').value)||0;
+  const advance = parseInt(document.getElementById('m-advance').value)||0;
+  const payload = {
+    name, phone, type, model, qty: parseInt(qty), price, amount, advance,
+    payment: document.getElementById('m-payment').value,
+    delivery, priority: document.getElementById('m-priority').value, handler,
+    req: document.getElementById('m-req').value.trim(),
+    matter: document.getElementById('m-matter').value.trim(),
+    commitments: document.getElementById('m-commit').value.trim(),
+  };
+  try {
+    if(editingId) {
+      const updated = await apiFetch(`/orders/${editingId}`, { method:'PUT', body: JSON.stringify(payload) });
+      const idx = orders.findIndex(x=>x.id===editingId);
+      if(idx>=0) orders[idx] = updated;
+    } else {
+      payload.status = type === 'Readymade' ? 'Confirmed' : 'New';
+      payload.created = new Date().toISOString();
+      const created = await apiFetch('/orders', { method:'POST', body: JSON.stringify(payload) });
+      orders.unshift(created);
+      alert('Work Order ' + created.id + ' created!');
+    }
+    closeNewOrder();
+    renderOrders();
+    updateStats();
+  } catch(e) { alert('Failed to save order: ' + e.message); }
+}
+
+// ─── DESIGNER ────────────────────────────────────────────────────────────────
+function renderDesigner() {
+  const list = orders
+    .filter(o=>['New','Design','Proof Sent'].includes(o.status) && o.type!=='Readymade')
+    .sort((a,b)=>{ if(a.priority==='Urgent'&&b.priority!=='Urgent') return -1; if(b.priority==='Urgent'&&a.priority!=='Urgent') return 1; return new Date(a.delivery)-new Date(b.delivery); });
+  const g = document.getElementById('designer-grid');
+  if(!list.length){ g.innerHTML='<div class="empty-state"><div class="empty-icon">✏️</div>No design work pending</div>'; return; }
+  g.innerHTML = list.map(o=>{
+    const dl = daysLeft(o.delivery);
+    return `<div class="job-card ${o.priority==='Urgent'?'urgent':'normal'}" onclick="openDetail('${o.id}')">
+      <div class="jc-top"><span class="jc-id">${o.id}</span>${o.priority==='Urgent'?'<span class="badge b-urgent">URGENT</span>':'<span class="badge b-normal">Normal</span>'}</div>
+      <div class="jc-name">${o.name}</div>
+      <div class="jc-model">${o.model||'Custom'} · ${parseInt(o.qty||0).toLocaleString('en-IN')} cards · ${o.type}</div>
+      ${o.matter?`<div class="jc-matter">${o.matter}</div>`:'<div style="font-size:11px;color:var(--muted);margin-bottom:10px;font-style:italic">No matter entered</div>'}
+      ${o.req?`<div style="font-size:11px;background:var(--blue-bg);color:var(--blue);padding:6px 8px;border-radius:6px;margin-bottom:8px;line-height:1.5">📌 ${o.req}</div>`:''}
+      <div class="jc-foot">
+        <span style="color:${dl<=2?'var(--red)':'var(--muted)'}">📅 Deliver ${fmtDate(o.delivery)} ${dl<=2?'⚠️':''}</span>
+        <span class="badge b-${o.status.toLowerCase().replace(' ','-')}">${o.status}</span>
+      </div>
+      ${o.commitments?`<div style="font-size:11px;color:var(--amber);background:var(--amber-bg);border-radius:6px;padding:6px 8px;margin-top:8px">⚠️ ${o.commitments}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+// ─── PRINT QUEUE ─────────────────────────────────────────────────────────────
+function renderPrint() {
+  const list = orders.filter(o=>['Confirmed','Printing'].includes(o.status));
+  const a = list.filter(o=>o.priority==='Urgent');
+  const b = list.filter(o=>o.priority==='Normal');
+  document.getElementById('la-cnt').textContent = a.length+' orders';
+  document.getElementById('lb-cnt').textContent = b.length+' orders';
+  [[a,'lane-a'],[b,'lane-b']].forEach(([items,id])=>{
+    const el=document.getElementById(id);
+    if(!items.length){ el.innerHTML='<div style="text-align:center;padding:24px;color:var(--muted);font-size:13px">No orders</div>'; return; }
+    el.innerHTML=items.sort((x,y)=>new Date(x.delivery)-new Date(y.delivery)).map(o=>{
+      const dl=daysLeft(o.delivery);
+      return `<div class="q-item" onclick="openDetail('${o.id}')">
+        <div class="qi-top"><span class="qi-name">${o.name}</span><span class="qi-date">${dl<0?'OVERDUE':dl===0?'Today':fmtDate(o.delivery)}</span></div>
+        <div class="qi-details"><span>${o.id}</span><span>${parseInt(o.qty||0).toLocaleString('en-IN')} cards</span><span>${o.type}</span><span class="badge b-${o.status.toLowerCase()}">${o.status}</span></div>
+        ${o.commitments?`<div style="font-size:11px;color:var(--amber);background:var(--amber-bg);border-radius:4px;padding:5px 8px;margin-top:8px">⚠️ ${o.commitments}</div>`:''}
+      </div>`;
+    }).join('');
+  });
+}
+
+// ─── STOCK ───────────────────────────────────────────────────────────────────
+function renderStock() {
+  const low = stock.filter(s=>s.current<100);
+  document.getElementById('low-stock-alert').innerHTML = low.length
+    ? `<div class="alert alert-red" style="margin-bottom:14px">⚠️ Low stock: <strong>${low.map(s=>s.num).join(', ')}</strong> — below 100 units. Reorder soon.</div>` : '';
+  document.getElementById('nb-stock').textContent = stock.length;
+  const g = document.getElementById('stock-grid');
+  if(!stock.length){ g.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div>No stock entries yet</div>'; return; }
+  g.innerHTML = stock.map(s=>`
+    <div class="stock-card ${s.current<100?'low-stock':''}">
+      ${s.current<100?'<span class="low-badge">LOW</span>':''}
+      <div class="stock-num">${s.num}</div>
+      <div class="stock-qty">${parseInt(s.current).toLocaleString('en-IN')}</div>
+      <div class="stock-lbl">current stock</div>
+      <div class="stock-lbl" style="margin-top:4px;font-size:10px">Arrived: ${parseInt(s.arrived).toLocaleString('en-IN')}</div>
+      <div class="stock-vendor">${s.vendor}</div>
+      <div class="stock-prices">
+        <span class="price-sell">Sell: ₹${s.sell}/pc</span>
+        <span class="price-dealer">Dealer: ₹${s.dealer}</span>
+      </div>
+      ${s.nop?`<div style="font-size:11px;color:var(--muted);margin-top:4px">Without printing: ₹${s.nop}/pc</div>`:''}
+    </div>`).join('');
+}
+
+function openStockEntry(){ document.getElementById('stock-overlay').classList.add('open'); }
+function closeStock(){ document.getElementById('stock-overlay').classList.remove('open'); }
+
+async function saveStock() {
+  const num = document.getElementById('sk-num').value.trim();
+  const qty = parseInt(document.getElementById('sk-qty').value)||0;
+  const dealer = parseFloat(document.getElementById('sk-dealer').value)||0;
+  const sell = parseFloat(document.getElementById('sk-sell').value)||0;
+  const vendor = document.getElementById('sk-vendor').value.trim();
+  const nop = parseFloat(document.getElementById('sk-nop').value)||0;
+  if(!num||!qty||!sell||!vendor){ alert('Fill required fields'); return; }
+  try {
+    const result = await apiFetch('/stock', { method:'POST', body: JSON.stringify({num,qty,dealer,sell,nop,vendor}) });
+    const idx = stock.findIndex(s=>s.num===num);
+    if(idx>=0) stock[idx] = result; else stock.push(result);
+    closeStock();
+    renderStock();
+    // Clear form
+    ['sk-num','sk-vendor','sk-qty','sk-dealer','sk-sell','sk-nop'].forEach(id=>document.getElementById(id).value='');
+  } catch(e) { alert('Failed to save stock: ' + e.message); }
+}
+
+// ─── ESTIMATION ──────────────────────────────────────────────────────────────
+function initEstimation() {
+  document.getElementById('est-date').textContent = new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'});
+  if(!estRows.length) estRows = [{desc:'Wedding Cards',card:'',price:'',qty:'',amount:0}];
+  renderEstRows();
+}
+function renderEstRows() {
+  const tbody = document.getElementById('est-rows');
+  tbody.innerHTML = estRows.map((r,i)=>`<tr>
+    <td>${i+1}</td>
+    <td><input value="${r.desc}" oninput="estChange(${i},'desc',this.value)" placeholder="Description" style="width:150px"></td>
+    <td><input value="${r.card}" oninput="estChange(${i},'card',this.value)" placeholder="Card No." style="width:80px"></td>
+    <td><input type="number" value="${r.price}" oninput="estChange(${i},'price',this.value)" placeholder="0" style="width:70px"></td>
+    <td><input type="number" value="${r.qty}" oninput="estChange(${i},'qty',this.value)" placeholder="0" style="width:80px"></td>
+    <td style="font-weight:600">₹${parseInt(r.amount||0).toLocaleString('en-IN')}</td>
+  </tr>`).join('');
+  calcEst();
+}
+function estChange(i,k,v){ estRows[i][k]=v; if(k==='price'||k==='qty') estRows[i].amount=(parseFloat(estRows[i].price)||0)*(parseInt(estRows[i].qty)||0); renderEstRows(); }
+function addEstRow(){ estRows.push({desc:'',card:'',price:'',qty:'',amount:0}); renderEstRows(); }
+function calcEst() {
+  const sub = estRows.reduce((s,r)=>s+(r.amount||0),0);
+  const adv = parseInt(document.getElementById('e-advance').value)||0;
+  document.getElementById('et-sub').textContent = fmtINR(sub);
+  document.getElementById('et-total').textContent = fmtINR(sub);
+  document.getElementById('et-balance').textContent = fmtINR(sub-adv);
+}
+function togglePayment(el,mode) {
+  el.classList.toggle('active');
+  if(el.classList.contains('active')){ if(!selectedPayments.includes(mode)) selectedPayments.push(mode); }
+  else selectedPayments = selectedPayments.filter(m=>m!==mode);
+}
+
+async function convertToOrder() {
+  const name = document.getElementById('e-name').value.trim();
+  const phone = document.getElementById('e-phone').value.trim();
+  const handler = document.getElementById('e-handler').value;
+  if(!name||!phone||!handler){ alert('Enter customer name, phone and handler to convert to work order'); return; }
+  const r = estRows[0];
+  const total = estRows.reduce((s,x)=>s+(x.amount||0),0);
+  const payload = {
+    name, phone, type:'Readymade', model:r.card, qty:parseInt(r.qty)||0,
+    price:parseFloat(r.price)||0, amount:total,
+    advance: parseInt(document.getElementById('e-advance').value)||0,
+    payment: selectedPayments.join('+') || 'Cash',
+    delivery: '', priority: document.getElementById('e-priority').value,
+    handler, req:'', matter:'', commitments:'', status:'New',
+    created: new Date().toISOString(),
+  };
+  try {
+    const created = await apiFetch('/orders', { method:'POST', body: JSON.stringify(payload) });
+    orders.unshift(created);
+    alert('Work Order ' + created.id + ' created! Go to Orders to add delivery date and details.');
+    estRows = [];
+    nav('orders');
+  } catch(e) { alert('Failed to create order'); }
+}
+function printEst(){ window.print(); }
+
+// ─── SALES ───────────────────────────────────────────────────────────────────
+function renderSales() {
+  const total = orders.reduce((s,o)=>s+parseInt(o.amount||0),0);
+  const adv   = orders.reduce((s,o)=>s+parseInt(o.advance||0),0);
+  document.getElementById('r-total').textContent = fmtINR(total);
+  document.getElementById('r-advance').textContent = fmtINR(adv);
+  document.getElementById('r-balance').textContent = fmtINR(total-adv);
+  document.getElementById('r-orders').textContent = orders.length;
+  const tbody = document.getElementById('sales-tbody');
+  if(!orders.length){ tbody.innerHTML='<tr><td colspan="10"><div class="empty-state">No orders yet</div></td></tr>'; return; }
+  const sorted = [...orders].sort((a,b)=>new Date(b.created)-new Date(a.created));
+  tbody.innerHTML = sorted.map(o=>{
+    const bal = parseInt(o.amount||0)-parseInt(o.advance||0);
+    return `<tr onclick="openDetail('${o.id}')">
+      <td style="font-size:12px;color:var(--muted)">${fmtDate(o.created)}</td>
+      <td><span class="order-id">${o.id}</span></td>
+      <td><div class="cell-name">${o.name}</div><div class="cell-sub">${o.phone}</div></td>
+      <td style="font-size:12px">${o.type}</td>
+      <td>${parseInt(o.qty||0).toLocaleString('en-IN')}</td>
+      <td style="font-weight:600">${fmtINR(o.amount)}</td>
+      <td style="color:var(--green)">${fmtINR(o.advance)}</td>
+      <td style="color:var(--red);font-weight:600">${fmtINR(bal)}</td>
+      <td style="font-size:12px">${o.payment||'—'}</td>
+      <td><span class="badge b-${o.status.toLowerCase().replace(' ','-')}">${o.status}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── WHATSAPP ────────────────────────────────────────────────────────────────
+function copyWA(btn) {
+  const box = btn.closest('.wa-card').querySelector('.wa-msg');
+  navigator.clipboard.writeText(box.textContent.trim()).then(()=>{
+    const orig = btn.textContent; btn.textContent='✓ Copied!'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('copied'); },2000);
+  });
+}
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+(async () => {
+  await checkHealth();
+  await loadOrders();
+  await loadStock();
+  renderOrders();
+  setInterval(checkHealth, 15000);
+})();
+</script>
+</body>
+</html>
