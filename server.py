@@ -337,7 +337,6 @@ def serve_static(path):
 if __name__ == '__main__':
     init_db()
     seed_db()
-    print('\n✅  RMCP Backend running at http://localhost:5050')
-    print('   Frontend served at   http://localhost:5050/')
-    print('   API base:            http://localhost:5050/api/\n')
-    app.run(host='0.0.0.0', port=5050, debug=False)
+    port = int(os.environ.get('PORT', 5050))
+    print(f'\n✅  RMCP Backend running at http://localhost:{port}')
+    app.run(host='0.0.0.0', port=port, debug=False)
