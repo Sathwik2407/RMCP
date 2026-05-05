@@ -1,34 +1,33 @@
 """
 RMCP Order System — Flask Backend
-Raj Multi Color Print · Kakinada
+Raj Multi Color Print · Kakinada · ESTD 1983
 """
 
 import sqlite3
-import json
 import os
 import re
 from datetime import date, datetime
-from flask import Flask, request, jsonify, send_from_directory, Response
+from flask import Flask, request, jsonify, send_from_directory
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-DB_PATH  = os.path.join(os.path.dirname(__file__), 'rmcp.db')
+# Uses /data/rmcp.db on Railway (persistent volume), falls back to local file
+DB_PATH  = os.environ.get('DB_PATH', os.path.join(os.path.dirname(__file__), 'rmcp.db'))
 FRONTEND = os.path.join(os.path.dirname(__file__), 'public')
 
 app = Flask(__name__, static_folder=FRONTEND, static_url_path='')
 
-# ─── CORS (manual, no flask-cors needed) ─────────────────────────────────────
+# ─── CORS ─────────────────────────────────────────────────────────────────────
 @app.after_request
 def add_cors(response):
     response.headers['Access-Control-Allow-Origin']  = '*'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
+    response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS,PATCH'
     return response
 
 @app.before_request
 def handle_options():
     if request.method == 'OPTIONS':
-        r = app.make_default_options_response()
-        return r
+        return app.make_default_options_response()
 
 # ─── DATABASE ─────────────────────────────────────────────────────────────────
 def get_db():
@@ -37,6 +36,9 @@ def get_db():
     return conn
 
 def init_db():
+    # Make sure the directory exists (important for /data volume on Railway)
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+
     conn = get_db()
     c = conn.cursor()
 
@@ -95,7 +97,7 @@ def seed_db():
         return
 
     def date_off(days):
-        from datetime import date, timedelta
+        from datetime import timedelta
         return (date.today() + timedelta(days=days)).isoformat()
 
     stock_rows = [
@@ -113,10 +115,20 @@ def seed_db():
     )
 
     orders = [
-        ('WC10310001','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',        date_off(2), 'Urgent','Brother 1','Telugu + English, Gold Acrylic plate','Bride: Priya, Groom: Siddha Venkateswara Rao. Parents: Suresh & Lakshmi. Wedding: 25 April 2025. Venue: Sri Kalyana Mandapam.','Delivery on 25th morning 9 AM sharp','Printing'),
-        ('WC10150002','Thummala Babu',           '88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',    date_off(5), 'Normal','Brother 2','Two different matters, each 250 cards','Matter 1: Bride: Anitha, Groom: Raju. Matter 2: Bride: Swathi, Groom: Kumar.','','Proof Sent'),
-        ('MC150003',  'Uppalapati Rudra Raju',   '77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',date_off(12),'Normal','Brother 1','9×9 size, Box Cover, Title with gold foil, Inner two sheets S/S','Full Telugu matter to be provided separately.','Agreed to deliver 2 days early if possible','Design'),
-        ('WC10340004','Lakshmi Prasad',           '99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',    date_off(-1),'Urgent','Brother 2','','','','Ready'),
+        ('WC10310001','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',
+         date_off(2),'Urgent','Brother 1','Telugu + English, Gold Acrylic plate',
+         'Bride: Priya, Groom: Siddha Venkateswara Rao. Parents: Suresh & Lakshmi. Wedding: 25 April 2025. Venue: Sri Kalyana Mandapam.',
+         'Delivery on 25th morning 9 AM sharp','Printing'),
+        ('WC10150002','Thummala Babu','88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',
+         date_off(5),'Normal','Brother 2','Two different matters, each 250 cards',
+         'Matter 1: Bride: Anitha, Groom: Raju. Matter 2: Bride: Swathi, Groom: Kumar.',
+         '','Proof Sent'),
+        ('MC150003','Uppalapati Rudra Raju','77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',
+         date_off(12),'Normal','Brother 1','9×9 size, Box Cover, Title with gold foil, Inner two sheets S/S',
+         'Full Telugu matter to be provided separately.',
+         'Agreed to deliver 2 days early if possible','Design'),
+        ('WC10340004','Lakshmi Prasad','99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',
+         date_off(-1),'Urgent','Brother 2','','','','Ready'),
     ]
     c.executemany(
         '''INSERT OR IGNORE INTO orders
@@ -145,9 +157,7 @@ def rows_to_list(rows):
 @app.route('/api/orders', methods=['GET'])
 def list_orders():
     conn = get_db()
-    rows = conn.execute(
-        'SELECT * FROM orders ORDER BY created DESC'
-    ).fetchall()
+    rows = conn.execute('SELECT * FROM orders ORDER BY created DESC').fetchall()
     conn.close()
     return jsonify(rows_to_list(rows))
 
@@ -163,7 +173,8 @@ def create_order():
 
     c.execute('''
         INSERT INTO orders
-          (id,name,phone,type,model,qty,price,amount,advance,payment,delivery,priority,handler,req,matter,commitments,status,created)
+          (id,name,phone,type,model,qty,price,amount,advance,payment,
+           delivery,priority,handler,req,matter,commitments,status,created)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ''', (
         order_id,
@@ -171,18 +182,18 @@ def create_order():
         data.get('phone',''),
         data.get('type',''),
         data.get('model',''),
-        int(data.get('qty',0)),
-        float(data.get('price',0)),
-        float(data.get('amount',0)),
-        float(data.get('advance',0)),
-        data.get('payment','Cash'),
-        data.get('delivery',''),
-        data.get('priority','Normal'),
-        data.get('handler',''),
-        data.get('req',''),
-        data.get('matter',''),
-        data.get('commitments',''),
-        data.get('status','New'),
+        int(data.get('qty', 0)),
+        float(data.get('price', 0)),
+        float(data.get('amount', 0)),
+        float(data.get('advance', 0)),
+        data.get('payment', 'Cash'),
+        data.get('delivery', ''),
+        data.get('priority', 'Normal'),
+        data.get('handler', ''),
+        data.get('req', ''),
+        data.get('matter', ''),
+        data.get('commitments', ''),
+        data.get('status', 'New'),
         data.get('created', datetime.now().isoformat()),
     ))
     conn.commit()
@@ -276,7 +287,8 @@ def upsert_stock():
     existing = c.execute('SELECT * FROM stock WHERE num=?', (num,)).fetchone()
     if existing:
         c.execute('''
-            UPDATE stock SET arrived=arrived+?, current=current+?, dealer=?, sell=?, nop=?, vendor=?
+            UPDATE stock
+            SET arrived=arrived+?, current=current+?, dealer=?, sell=?, nop=?, vendor=?
             WHERE num=?
         ''', (qty, qty, dealer, sell, nop, vendor, num))
     else:
@@ -303,15 +315,15 @@ def get_stats():
     conn = get_db()
     c = conn.cursor()
     active = c.execute("SELECT * FROM orders WHERE status != 'Delivered'").fetchall()
-    total_amount  = sum(r['amount'] or 0 for r in active)
+    total_amount  = sum(r['amount']  or 0 for r in active)
     total_advance = sum(r['advance'] or 0 for r in active)
     stats = {
-        'active':    len(active),
-        'urgent':    sum(1 for r in active if r['priority'] == 'Urgent'),
-        'design':    sum(1 for r in active if r['status'] in ('Design','Proof Sent')),
-        'printing':  sum(1 for r in active if r['status'] == 'Printing'),
-        'ready':     sum(1 for r in active if r['status'] == 'Ready'),
-        'balance':   total_amount - total_advance,
+        'active':   len(active),
+        'urgent':   sum(1 for r in active if r['priority'] == 'Urgent'),
+        'design':   sum(1 for r in active if r['status'] in ('Design', 'Proof Sent')),
+        'printing': sum(1 for r in active if r['status'] == 'Printing'),
+        'ready':    sum(1 for r in active if r['status'] == 'Ready'),
+        'balance':  total_amount - total_advance,
     }
     conn.close()
     return jsonify(stats)
@@ -339,4 +351,7 @@ if __name__ == '__main__':
     seed_db()
     port = int(os.environ.get('PORT', 5050))
     print(f'\n✅  RMCP Backend running at http://localhost:{port}')
+    print(f'   Database location: {DB_PATH}')
+    print(f'   Frontend served at: http://localhost:{port}/')
+    print(f'   API base:           http://localhost:{port}/api/\n')
     app.run(host='0.0.0.0', port=port, debug=False)
