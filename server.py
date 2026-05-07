@@ -456,6 +456,10 @@ def serve_static(path):
     return send_from_directory(FRONTEND, path)
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
+
+init_db()
+seed_db()
+
 if __name__ == '__main__':
     if not DATABASE_URL:
         print('❌  ERROR: DATABASE_URL environment variable is not set.')
