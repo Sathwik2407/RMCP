@@ -2209,7 +2209,6 @@
     }
 
     let editingStockNum = null;
-
     function openStockEntry() {
       editingStockNum = null;
       document.querySelector('#stock-overlay .modal-title').textContent = 'Add New Stock';
@@ -2219,7 +2218,6 @@
       document.getElementById('sk-qty').placeholder = 'e.g. 1000';
       document.getElementById('stock-overlay').classList.add('open');
     }
-
     function openStockEdit(num) {
       const s = stock.find(x => x.num === num);
       if (!s) return;
@@ -2230,13 +2228,12 @@
       document.getElementById('sk-num').readOnly = true;
       document.getElementById('sk-vendor').value = s.vendor;
       document.getElementById('sk-qty').value = '';
-      document.getElementById('sk-qty').placeholder = 'Qty to ADD (e.g. 500) — leave 0 to only update prices';
+      document.getElementById('sk-qty').placeholder = 'Qty to ADD (e.g. 500)';
       document.getElementById('sk-dealer').value = s.dealer;
       document.getElementById('sk-sell').value = s.sell;
       document.getElementById('sk-nop').value = s.nop || '';
       document.getElementById('stock-overlay').classList.add('open');
     }
-
     function closeStock() {
       document.getElementById('stock-overlay').classList.remove('open');
       editingStockNum = null;
@@ -2332,76 +2329,52 @@
     function printEst() {
       const name = document.getElementById('e-name').value || '—';
       const phone = document.getElementById('e-phone').value || '—';
-      const handler = document.getElementById('e-handler').value || '—';
       const date = document.getElementById('est-date').textContent || '';
       const sub = document.getElementById('et-sub').textContent || '₹0';
       const total = document.getElementById('et-total').textContent || '₹0';
-      const balance = document.getElementById('et-balance').textContent || '₹0';
-      const advance = document.getElementById('e-advance').value || '0';
-      const rowsHtml = estRows.map((r, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${r.desc || ''}</td>
-          <td>${r.card || ''}</td>
-          <td>₹${parseFloat(r.price || 0).toLocaleString('en-IN')}</td>
-          <td>${parseInt(r.qty || 0).toLocaleString('en-IN')}</td>
-          <td>₹${parseInt(r.amount || 0).toLocaleString('en-IN')}</td>
-        </tr>`).join('');
+      const rowsHtml = estRows.map((r, i) => '<tr><td>' + (i + 1) + '</td><td>' + (r.desc || '') + '</td><td>' + (r.card || '') + '</td><td>₹' + parseFloat(r.price || 0).toLocaleString('en-IN') + '</td><td>' + parseInt(r.qty || 0).toLocaleString('en-IN') + '</td><td>₹' + parseInt(r.amount || 0).toLocaleString('en-IN') + '</td></tr>').join('');
       const win = window.open('', '_blank', 'width=794,height=1123');
-      win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-      <title>Estimation — ${name}</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; }
-        body { font-family:'Segoe UI',Arial,sans-serif; font-size:13px; color:#1a1a1a; background:#fff; padding:32px 40px; }
-        .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid #8B6914; padding-bottom:14px; margin-bottom:20px; }
-        .brand { font-size:22px; font-weight:700; color:#8B6914; letter-spacing:0.5px; }
-        .brand-sub { font-size:11px; color:#666; margin-top:3px; }
-        .est-label { font-size:18px; font-weight:700; color:#8B6914; text-align:right; }
-        .est-date { font-size:12px; color:#666; text-align:right; margin-top:3px; }
-        .customer-box { display:flex; gap:40px; background:#faf7f0; border:1px solid #e8d9b0; border-radius:8px; padding:14px 18px; margin-bottom:20px; }
-        .cust-field { flex:1; }
-        .cust-label { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
-        .cust-value { font-size:14px; font-weight:600; color:#1a1a1a; }
-        table { width:100%; border-collapse:collapse; margin-bottom:20px; }
-        thead tr { background:#8B6914; color:#fff; }
-        thead th { padding:9px 10px; text-align:left; font-size:12px; font-weight:600; }
-        tbody tr:nth-child(even) { background:#faf7f0; }
-        tbody td { padding:9px 10px; border-bottom:1px solid #ede0c4; font-size:13px; }
-        .totals { display:flex; justify-content:flex-end; margin-bottom:24px; }
-        .totals-box { width:260px; border:1px solid #e8d9b0; border-radius:8px; overflow:hidden; }
-        .tot-row { display:flex; justify-content:space-between; padding:8px 14px; font-size:13px; border-bottom:1px solid #f0e6cc; }
-        .tot-row.bold { font-weight:700; font-size:14px; background:#faf7f0; }
-        .tot-row.balance { color:#c0392b; font-weight:700; font-size:14px; background:#fff5f5; border-bottom:none; }
-        .footer { border-top:1px dashed #c9a84c; padding-top:14px; display:flex; justify-content:space-between; align-items:flex-end; }
-        .footer-note { font-size:11px; color:#888; }
-        .sig-line { border-top:1px solid #333; width:160px; text-align:center; padding-top:5px; font-size:11px; color:#555; }
-        @media print { body { padding:20px 28px; } }
-      </style></head><body>
-      <div class="header">
-        <div><div class="brand">Raj Multi Color Print</div><div class="brand-sub">ESTD 1983 · Wedding Cards & Luxury Invitations · Kakinada</div></div>
-        <div><div class="est-label">ESTIMATION</div><div class="est-date">${date}</div></div>
-      </div>
-      <div class="customer-box">
-        <div class="cust-field"><div class="cust-label">Customer Name</div><div class="cust-value">${name}</div></div>
-        <div class="cust-field"><div class="cust-label">Phone Number</div><div class="cust-value">${phone}</div></div>
-        <div class="cust-field"><div class="cust-label">Handled By</div><div class="cust-value">${handler}</div></div>
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>Description</th><th>Card No.</th><th>Price (₹)</th><th>Qty</th><th>Amount (₹)</th></tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-      <div class="totals"><div class="totals-box">
-        <div class="tot-row"><span>Subtotal</span><span>${sub}</span></div>
-        <div class="tot-row bold"><span>TOTAL</span><span>${total}</span></div>
-        <div class="tot-row"><span>Advance Paid</span><span>₹${parseInt(advance || 0).toLocaleString('en-IN')}</span></div>
-        <div class="tot-row balance"><span>Balance Due</span><span>${balance}</span></div>
-      </div></div>
-      <div class="footer">
-        <div class="footer-note">Thank you for choosing Raj Multi Color Print!<br>This is a computer-generated estimate.</div>
-        <div class="sig-line">Authorised Signature</div>
-      </div>
-      <script>window.onload=function(){window.print();}<\/script>
-      </body></html>`);
+      win.document.write('<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Estimation</title><style>'
+        + '* { margin:0; padding:0; box-sizing:border-box; }'
+        + 'body { font-family:Arial,sans-serif; font-size:13px; color:#1a1a1a; background:#fff; padding:36px 44px; }'
+        + '.header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2.5px solid #8B6914; padding-bottom:14px; margin-bottom:22px; }'
+        + '.brand { font-size:24px; font-weight:700; color:#8B6914; }'
+        + '.brand-sub { font-size:11px; color:#666; margin-top:4px; }'
+        + '.est-label { font-size:20px; font-weight:700; color:#8B6914; text-align:right; }'
+        + '.est-date { font-size:12px; color:#666; text-align:right; margin-top:4px; }'
+        + '.cust-box { display:flex; gap:32px; background:#faf7f0; border:1px solid #e8d9b0; border-radius:8px; padding:14px 18px; margin-bottom:22px; }'
+        + '.cf { flex:1; } .cl { font-size:10px; color:#888; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }'
+        + '.cv { font-size:14px; font-weight:600; }'
+        + 'table { width:100%; border-collapse:collapse; margin-bottom:22px; }'
+        + 'thead tr { background:#8B6914; color:#fff; }'
+        + 'thead th { padding:9px 10px; text-align:left; font-size:12px; font-weight:600; }'
+        + 'tbody tr:nth-child(even) { background:#faf7f0; }'
+        + 'tbody td { padding:9px 10px; border-bottom:1px solid #ede0c4; }'
+        + '.totals { display:flex; justify-content:flex-end; margin-bottom:36px; }'
+        + '.tbox { width:240px; border:1px solid #e8d9b0; border-radius:8px; overflow:hidden; }'
+        + '.tr { display:flex; justify-content:space-between; padding:8px 14px; border-bottom:1px solid #f0e6cc; font-size:13px; }'
+        + '.tr.bold { font-weight:700; font-size:15px; background:#faf7f0; border-bottom:none; }'
+        + '.sig-section { display:flex; justify-content:space-between; align-items:flex-end; border-top:1px dashed #c9a84c; padding-top:18px; margin-top:8px; }'
+        + '.sig-note { font-size:11px; color:#888; line-height:1.6; }'
+        + '.sig-box { text-align:center; }'
+        + '.sig-line { display:inline-block; border-bottom:1.5px solid #333; width:180px; margin-bottom:6px; height:40px; }'
+        + '.sig-label { font-size:11px; color:#444; font-weight:600; }'
+        + '@media print { body { padding:20px 28px; } @page { margin:8mm; size:A4; } }'
+        + '</style></head><body>'
+        + '<div class="header"><div><div class="brand">Raj Multi Color Print</div><div class="brand-sub">ESTD 1983 · Wedding Cards & Luxury Invitations · Kakinada</div></div>'
+        + '<div><div class="est-label">ESTIMATION</div><div class="est-date">' + date + '</div></div></div>'
+        + '<div class="cust-box">'
+        + '<div class="cf"><div class="cl">Customer Name</div><div class="cv">' + name + '</div></div>'
+        + '<div class="cf"><div class="cl">Phone Number</div><div class="cv">' + phone + '</div></div>'
+        + '</div>'
+        + '<table><thead><tr><th>#</th><th>Description</th><th>Card No.</th><th>Price (₹)</th><th>Qty</th><th>Amount (₹)</th></tr></thead><tbody>' + rowsHtml + '</tbody></table>'
+        + '<div class="totals"><div class="tbox"><div class="tr"><span>Subtotal</span><span>' + sub + '</span></div><div class="tr bold"><span>TOTAL</span><span>' + total + '</span></div></div></div>'
+        + '<div class="sig-section">'
+        + '<div class="sig-note">Thank you for choosing Raj Multi Color Print!<br>This is a computer-generated estimate.<br>Goods once sold will not be taken back.</div>'
+        + '<div class="sig-box"><div class="sig-line"></div><div class="sig-label">Authorised Signatory</div><div style="font-size:10px;color:#888;margin-top:3px">(Owner / Raj Multi Color Print)</div></div>'
+        + '</div>'
+        + '<script>window.onload=function(){window.print();};<\/script>'
+        + '</body></html>');
       win.document.close();
     }
 
