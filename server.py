@@ -345,6 +345,26 @@ def upsert_stock():
         conn.close()
     return jsonify(row_to_dict(row)), 201
 
+@app.route('/api/stock/<num>/deduct', methods=['PATCH'])
+def deduct_stock(num):
+    data = request.get_json()
+    qty = int(data.get('qty', 0))
+    with db_lock:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('SELECT current FROM stock WHERE num=%s', (num,))
+        row = c.fetchone()
+        if not row:
+            c.close(); conn.close()
+            return jsonify({'error': 'Stock item not found'}), 404
+        new_current = max(0, row['current'] - qty)
+        c.execute('UPDATE stock SET current=%s WHERE num=%s', (new_current, num))
+        conn.commit()
+        c.execute('SELECT * FROM stock WHERE num=%s', (num,))
+        updated = c.fetchone()
+        c.close(); conn.close()
+    return jsonify(row_to_dict(updated))
+
 @app.route('/api/stock/<num>', methods=['DELETE'])
 def delete_stock(num):
     with db_lock:
@@ -456,18 +476,14 @@ def serve_static(path):
     return send_from_directory(FRONTEND, path)
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
-
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
 init_db()
 seed_db()
 
 if __name__ == '__main__':
     if not DATABASE_URL:
         print('❌  ERROR: DATABASE_URL environment variable is not set.')
-        print('   For local use, set it in a .env file or run:')
-        print('   set DATABASE_URL=postgresql://user:password@localhost:5432/rmcp')
         exit(1)
-    init_db()
-    seed_db()
     port = int(os.environ.get('PORT', 5050))
     print(f'\n✅  RMCP Backend running at http://localhost:{port}')
     print(f'   Database : PostgreSQL')
