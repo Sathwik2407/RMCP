@@ -90,6 +90,20 @@ def init_db():
     ''')
     c.execute('INSERT INTO counter (id, val) VALUES (1, 1) ON CONFLICT (id) DO NOTHING')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS stock_history (
+            id          SERIAL PRIMARY KEY,
+            num         TEXT NOT NULL,
+            action      TEXT NOT NULL,
+            old_qty     INTEGER,
+            new_qty     INTEGER,
+            qty_change  INTEGER,
+            notes       TEXT,
+            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+            FOREIGN KEY (num) REFERENCES stock(num)
+        )
+    ''')
+
     conn.commit()
     c.close()
     conn.close()
@@ -158,6 +172,16 @@ def seed_db():
     print('✅ Demo data seeded')
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
+def log_stock_movement(conn, num, action, old_qty, new_qty, notes=''):
+    """Log stock movement to history table."""
+    c = conn.cursor()
+    qty_change = new_qty - old_qty if old_qty is not None else new_qty
+    c.execute('''
+        INSERT INTO stock_history (num, action, old_qty, new_qty, qty_change, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    ''', (num, action, old_qty, new_qty, qty_change, notes))
+    c.close()
+
 def gen_id(type_, card, qty, counter):
     prefix    = {'Readymade': 'WC', 'Semi-custom': 'SC'}.get(type_, 'MC')
     card_part = re.sub(r'\D', '', str(card or ''))[:3]
@@ -324,20 +348,24 @@ def upsert_stock():
     with db_lock:
         conn = get_db()
         c = conn.cursor()
-        c.execute('SELECT num FROM stock WHERE num=%s', (num,))
+        c.execute('SELECT num, current FROM stock WHERE num=%s', (num,))
         existing = c.fetchone()
         if existing:
+            old_qty = existing['current']
+            new_qty = old_qty + qty
             c.execute('''
                 UPDATE stock
                 SET arrived=arrived+%s, current=current+%s,
                     dealer=%s, sell=%s, nop=%s, vendor=%s
                 WHERE num=%s
             ''', (qty, qty, dealer, sell, nop, vendor, num))
+            log_stock_movement(conn, num, 'ADD', old_qty, new_qty, f'Added {qty} units')
         else:
             c.execute('''
                 INSERT INTO stock (num,arrived,current,dealer,sell,nop,vendor)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)
             ''', (num, qty, qty, dealer, sell, nop, vendor))
+            log_stock_movement(conn, num, 'CREATE', None, qty, 'Initial entry')
         conn.commit()
         c.execute('SELECT * FROM stock WHERE num=%s', (num,))
         row = c.fetchone()
@@ -357,8 +385,10 @@ def deduct_stock(num):
         if not row:
             c.close(); conn.close()
             return jsonify({'error': 'Stock item not found'}), 404
-        new_current = max(0, row['current'] - qty)
+        old_qty = row['current']
+        new_current = max(0, old_qty - qty)
         c.execute('UPDATE stock SET current=%s WHERE num=%s', (new_current, num))
+        log_stock_movement(conn, num, 'DEDUCT', old_qty, new_current, f'Deducted {qty} units')
         conn.commit()
         c.execute('SELECT * FROM stock WHERE num=%s', (num,))
         updated = c.fetchone()
@@ -375,6 +405,17 @@ def delete_stock(num):
         c.close()
         conn.close()
     return jsonify({'deleted': num})
+
+@app.route('/api/stock/<num>/history', methods=['GET'])
+def get_stock_history(num):
+    """Get stock movement history for a specific item."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM stock_history WHERE num=%s ORDER BY created DESC', (num,))
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    return jsonify(rows_to_list(rows))
 
 # ─── ROUTES: STATS ────────────────────────────────────────────────────────────
 @app.route('/api/stats', methods=['GET'])

@@ -33,6 +33,21 @@
       --r: 8px;
     }
 
+    :root[data-theme="dark"] {
+      --ink: #E8E6E0;
+      --ink2: #D1CEC5;
+      --paper: #1C1A14;
+      --paper2: #2E2B22;
+      --paper3: #3D3A30;
+      --muted: #8C8780;
+      --border: #4A4740;
+      --red-bg: #4A2425;
+      --green-bg: #1F3F35;
+      --amber-bg: #4A3F1A;
+      --blue-bg: #1E2F4F;
+      --purple-bg: #3D2855;
+    }
+
     *,
     *::before,
     *::after {
@@ -1296,6 +1311,156 @@
       border-radius: 50%;
       background: currentColor;
     }
+
+    /* DARK MODE TOGGLE */
+    .theme-toggle {
+      background: none;
+      border: none;
+      font-size: 18px;
+      cursor: pointer;
+      color: #888;
+      transition: color .2s;
+      padding: 6px;
+    }
+
+    .theme-toggle:hover {
+      color: var(--gold);
+    }
+
+    /* MOBILE RESPONSIVE */
+    @media (max-width: 768px) {
+      .stats-strip {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .sidebar {
+        width: 60px;
+      }
+
+      .nav-item {
+        justify-content: center;
+        padding: 10px 8px;
+      }
+
+      .nav-icon {
+        font-size: 18px;
+      }
+
+      .nav-item span:not(.nav-icon):not(.nav-badge) {
+        display: none;
+      }
+
+      .nav-badge {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        margin-left: 0;
+      }
+
+      .content {
+        margin-left: 60px;
+        padding: 16px;
+      }
+
+      .modal {
+        width: 90%;
+        max-width: 100%;
+      }
+
+      .detail-modal {
+        width: 90%;
+        max-width: 100%;
+      }
+
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .fg.full {
+        grid-column: 1;
+      }
+
+      .toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .search-box {
+        width: 100%;
+        margin-left: 0;
+      }
+
+      .card-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .stock-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      }
+
+      .lanes {
+        grid-template-columns: 1fr;
+      }
+
+      .report-summary {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .topbar {
+        height: auto;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+      }
+
+      .topbar-center {
+        order: 3;
+        width: 100%;
+        margin-top: 8px;
+        flex-wrap: wrap;
+      }
+
+      .est-table {
+        font-size: 12px;
+      }
+
+      .est-table th,
+      .est-table td {
+        padding: 6px 8px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .brand {
+        font-size: 14px;
+      }
+
+      .stat-val {
+        font-size: 18px;
+      }
+
+      .report-summary {
+        grid-template-columns: 1fr;
+      }
+
+      table th,
+      table td {
+        font-size: 12px;
+        padding: 8px 10px;
+      }
+
+      .toolbar-title {
+        font-size: 18px;
+      }
+
+      .topbar-right {
+        gap: 5px;
+      }
+
+      .btn-new {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+    }
   </style>
 </head>
 
@@ -1313,6 +1478,7 @@
       <button class="top-tab" onclick="nav('whatsapp')">WhatsApp</button>
     </div>
     <div class="topbar-right">
+      <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle Dark Mode">🌙</button>
       <div class="live-clock" id="clock"></div>
       <button class="btn-new" onclick="openNewOrder()">+ New Order</button>
     </div>
@@ -1444,7 +1610,9 @@
       <div class="page" id="page-stock">
         <div class="toolbar">
           <span class="toolbar-title">Stock Inventory</span>
-          <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:auto">+ Add Stock</button>
+          <input class="search-box" type="text" id="stock-search" placeholder="Search card number…"
+            oninput="renderStock()" style="margin-left: auto; width: 220px;">
+          <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:10px">+ Add Stock</button>
         </div>
         <div id="low-stock-alert"></div>
         <div class="stock-grid" id="stock-grid"></div>
@@ -1507,8 +1675,12 @@
             Add Item</button>
           <div class="est-totals">
             <div class="est-total-box">
-              <div class="est-total-row"><span>Subtotal</span><span id="et-sub">₹0</span></div>
-              <div class="est-total-row bold"><span>TOTAL</span><span id="et-total">₹0</span></div>
+              <div class="est-total-row"><span>Subtotal (Base Amount)</span><span id="et-sub">₹0</span></div>
+              <div class="est-total-row">
+                <span>GST @ 18%</span>
+                <span id="et-gst">₹0</span>
+              </div>
+              <div class="est-total-row bold"><span>TOTAL (Incl. GST)</span><span id="et-total">₹0</span></div>
               <div style="margin-top:12px">
                 <div class="flabel" style="margin-bottom:5px">Advance Amount (₹)</div>
                 <input class="finput" type="number" id="e-advance" placeholder="0" oninput="calcEst()">
@@ -2185,14 +2357,16 @@
 
     // ─── STOCK ───────────────────────────────────────────────────────────────────
     function renderStock() {
-      const low = stock.filter(s => s.current < 100);
+      const searchVal = (document.getElementById('stock-search')?.value || '').toLowerCase();
+      const filtered = stock.filter(s => s.num.toLowerCase().includes(searchVal));
+      const low = filtered.filter(s => s.current < 100);
       document.getElementById('low-stock-alert').innerHTML = low.length
         ? `<div class="alert alert-red" style="margin-bottom:14px">⚠️ Low stock: <strong>${low.map(s => s.num).join(', ')}</strong> — below 100 units. Reorder soon.</div>` : '';
       document.getElementById('nb-stock').textContent = stock.length;
       const g = document.getElementById('stock-grid');
-      if (!stock.length) { g.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div>No stock entries yet</div>'; return; }
-      g.innerHTML = stock.map(s => `
-    <div class="stock-card ${s.current < 100 ? 'low-stock' : ''}" onclick="openStockEdit('${s.num}')" style="cursor:pointer">
+      if (!filtered.length) { g.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div>No stock entries found</div>'; return; }
+      g.innerHTML = filtered.map(s => `
+    <div class="stock-card ${s.current < 100 ? 'low-stock' : ''}" style="position:relative">
       ${s.current < 100 ? '<span class="low-badge">LOW</span>' : ''}
       <div class="stock-num">${s.num}</div>
       <div class="stock-qty">${parseInt(s.current).toLocaleString('en-IN')}</div>
@@ -2204,7 +2378,10 @@
         <span class="price-dealer">Dealer: ₹${s.dealer}</span>
       </div>
       ${s.nop ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Without printing: ₹${s.nop}/pc</div>` : ''}
-      <div style="font-size:11px;color:var(--gold-dark);margin-top:8px;text-align:center;border-top:1px solid var(--paper2);padding-top:6px">✏️ Click to edit / add stock</div>
+      <div style="display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--paper2);padding-top:6px">
+        <button onclick="openStockEdit('${s.num}')" style="flex:1;font-size:11px;color:var(--gold-dark);background:none;border:1px solid var(--border);padding:4px;border-radius:4px;cursor:pointer">✏️ Edit</button>
+        <button onclick="viewStockHistory('${s.num}')" style="flex:1;font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);padding:4px;border-radius:4px;cursor:pointer">📊 History</button>
+      </div>
     </div>`).join('');
     }
 
@@ -2291,10 +2468,13 @@
     function addEstRow() { estRows.push({ desc: '', card: '', price: '', qty: '', amount: 0 }); renderEstRows(); }
     function calcEst() {
       const sub = estRows.reduce((s, r) => s + (r.amount || 0), 0);
+      const gst = Math.round(sub * 0.18);
+      const total = sub + gst;
       const adv = parseInt(document.getElementById('e-advance').value) || 0;
       document.getElementById('et-sub').textContent = fmtINR(sub);
-      document.getElementById('et-total').textContent = fmtINR(sub);
-      document.getElementById('et-balance').textContent = fmtINR(sub - adv);
+      document.getElementById('et-gst').textContent = fmtINR(gst);
+      document.getElementById('et-total').textContent = fmtINR(total);
+      document.getElementById('et-balance').textContent = fmtINR(total - adv);
     }
     function togglePayment(el, mode) {
       el.classList.toggle('active');
@@ -2308,7 +2488,9 @@
       const handler = document.getElementById('e-handler').value;
       if (!name || !phone || !handler) { alert('Enter customer name, phone and handler to convert to work order'); return; }
       const r = estRows[0];
-      const total = estRows.reduce((s, x) => s + (x.amount || 0), 0);
+      const subtotal = estRows.reduce((s, x) => s + (x.amount || 0), 0);
+      const gst = Math.round(subtotal * 0.18);
+      const total = subtotal + gst;
       const payload = {
         name, phone, type: 'Readymade', model: r.card, qty: parseInt(r.qty) || 0,
         price: parseFloat(r.price) || 0, amount: total,
@@ -2415,7 +2597,53 @@
       });
     }
 
+    // ─── DARK MODE ───────────────────────────────────────────────────────────────
+    function toggleTheme() {
+      const html = document.documentElement;
+      const currentTheme = html.getAttribute('data-theme');
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', newTheme);
+      localStorage.setItem('theme', newTheme);
+      document.getElementById('theme-toggle').textContent = newTheme === 'dark' ? '☀️' : '🌙';
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('theme') || 'light';
+      document.documentElement.setAttribute('data-theme', saved);
+      document.getElementById('theme-toggle').textContent = saved === 'dark' ? '☀️' : '🌙';
+    }
+
+    // ─── STOCK HISTORY ───────────────────────────────────────────────────────────
+    async function viewStockHistory(num) {
+      const resp = await apiFetch(`/stock/${num}/history`);
+      if (!resp.ok) return alert('Failed to load history');
+      const history = await resp.json();
+
+      const historyHtml = history.length ? history.map(h => `
+        <div class="drow" style="padding:8px 0;font-size:12px">
+          <span class="dlabel" style="min-width:100px">${fmtDate(h.created)}</span>
+          <div style="flex:1">
+            <div style="font-weight:600;color:var(--ink)">${h.action}</div>
+            <div style="font-size:11px;color:var(--muted)">Qty: ${h.old_qty || '—'} → ${h.new_qty} (${h.qty_change > 0 ? '+' : ''}${h.qty_change})</div>
+            ${h.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.notes}</div>` : ''}
+          </div>
+        </div>
+      `).join('') : '<div class="empty-state" style="padding:20px"><div class="empty-icon">📊</div>No movement history yet</div>';
+
+      document.getElementById('detail-content').innerHTML = `
+        <div class="modal-head">
+          <div class="modal-title">📊 Stock History: ${num}</div>
+          <button class="modal-close" onclick="closeDetail()">×</button>
+        </div>
+        <div class="modal-body" style="max-height:500px;overflow-y:auto">
+          ${historyHtml}
+        </div>
+      `;
+      document.getElementById('detail-overlay').classList.add('open');
+    }
+
     // ─── INIT ────────────────────────────────────────────────────────────────────
+    initTheme();
     (async () => {
       await checkHealth();
       await loadOrders();
