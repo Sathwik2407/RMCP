@@ -62,6 +62,7 @@
       color: var(--ink);
       min-height: 100vh;
       overflow-x: hidden;
+      transition: background 0.3s ease, color 0.3s ease;
     }
 
     /* TOPBAR */
@@ -77,7 +78,8 @@
       left: 0;
       right: 0;
       z-index: 200;
-      border-bottom: 1px solid rgba(201, 168, 76, 0.3);
+      border-bottom: 2px solid var(--gold);
+      box-shadow: 0 2px 12px rgba(201, 168, 76, 0.15);
     }
 
     .brand {
@@ -86,10 +88,12 @@
       font-weight: 600;
       color: var(--gold);
       letter-spacing: 0.04em;
+      transition: all 0.2s ease;
     }
 
     .brand span {
       color: #fff;
+      font-weight: 400;
     }
 
     .topbar-center {
@@ -106,18 +110,19 @@
       cursor: pointer;
       border: none;
       background: transparent;
-      transition: all .2s;
+      transition: all .2s ease;
       letter-spacing: 0.03em;
     }
 
     .top-tab:hover {
       color: #fff;
-      background: rgba(255, 255, 255, 0.07);
+      background: rgba(255, 255, 255, 0.1);
     }
 
     .top-tab.active {
       color: var(--gold);
-      background: rgba(201, 168, 76, 0.12);
+      background: rgba(201, 168, 76, 0.15);
+      border-radius: 4px;
     }
 
     .topbar-right {
@@ -133,21 +138,26 @@
     }
 
     .btn-new {
-      background: var(--gold);
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
       color: var(--ink);
       border: none;
-      padding: 7px 16px;
+      padding: 8px 18px;
       border-radius: 6px;
       font-size: 13px;
       font-weight: 600;
       cursor: pointer;
       font-family: 'DM Sans', sans-serif;
-      transition: background .15s;
+      transition: all .2s ease;
+      box-shadow: 0 2px 8px rgba(201, 168, 76, 0.25);
     }
 
     .btn-new:hover {
-      background: var(--gold-dark);
-      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(201, 168, 76, 0.35);
+    }
+
+    .btn-new:active {
+      transform: translateY(0);
     }
 
     /* LAYOUT */
@@ -166,7 +176,7 @@
       left: 0;
       bottom: 0;
       overflow-y: auto;
-      border-right: 1px solid rgba(201, 168, 76, 0.15);
+      border-right: 2px solid rgba(201, 168, 76, 0.1);
     }
 
     .nav-section {
@@ -187,18 +197,18 @@
       color: #999;
       cursor: pointer;
       border-left: 3px solid transparent;
-      transition: all .15s;
+      transition: all .2s ease;
     }
 
     .nav-item:hover {
       color: #e0e0e0;
-      background: rgba(255, 255, 255, 0.04);
+      background: rgba(255, 255, 255, 0.05);
     }
 
     .nav-item.active {
       color: var(--gold);
       border-left-color: var(--gold);
-      background: rgba(201, 168, 76, 0.08);
+      background: rgba(201, 168, 76, 0.1);
     }
 
     .nav-icon {
@@ -255,6 +265,14 @@
       padding: 14px 16px;
       position: relative;
       overflow: hidden;
+      transition: all .2s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+
+    .stat:hover {
+      border-color: var(--gold);
+      box-shadow: 0 4px 12px rgba(201, 168, 76, 0.15);
+      transform: translateY(-2px);
     }
 
     .stat::before {
@@ -654,39 +672,48 @@
       cursor: pointer;
       font-family: 'DM Sans', sans-serif;
       border: none;
-      transition: all .15s;
+      transition: all .2s ease;
     }
 
     .btn-primary {
-      background: var(--gold);
+      background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
       color: var(--ink);
+      box-shadow: 0 2px 8px rgba(201, 168, 76, 0.25);
     }
 
     .btn-primary:hover {
-      background: var(--gold-dark);
-      color: #fff;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(201, 168, 76, 0.35);
+    }
+
+    .btn-primary:active {
+      transform: translateY(0);
     }
 
     .btn-ghost {
       background: transparent;
       color: var(--muted);
       border: 1px solid var(--border);
+      transition: all .2s ease;
     }
 
     .btn-ghost:hover {
       border-color: var(--ink);
       color: var(--ink);
+      background: var(--paper2);
     }
 
     .btn-danger {
       background: var(--red-bg);
       color: var(--red);
       border: 1px solid #fca5a5;
+      transition: all .2s ease;
     }
 
     .btn-danger:hover {
       background: var(--red);
       color: #fff;
+      transform: translateY(-2px);
     }
 
     /* DETAIL PANEL */
@@ -786,13 +813,15 @@
       border-radius: var(--r);
       padding: 16px;
       cursor: pointer;
-      transition: all .2s;
+      transition: all .2s ease;
       border-left: 4px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
     .job-card:hover {
-      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
-      transform: translateY(-1px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+      transform: translateY(-4px);
+      border-color: var(--gold);
     }
 
     .job-card.urgent {
@@ -958,13 +987,15 @@
       border-radius: var(--r);
       padding: 16px;
       cursor: pointer;
-      transition: all .15s;
+      transition: all .2s ease;
       position: relative;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     }
 
     .stock-card:hover {
       border-color: var(--gold);
-      box-shadow: 0 2px 8px rgba(201, 168, 76, 0.15);
+      box-shadow: 0 8px 24px rgba(201, 168, 76, 0.2);
+      transform: translateY(-4px);
     }
 
     .stock-card.low-stock {
@@ -1475,6 +1506,7 @@
       <button class="top-tab" onclick="nav('stock')">Stock</button>
       <button class="top-tab" onclick="nav('estimation')">Estimation</button>
       <button class="top-tab" onclick="nav('sales')">Sales</button>
+      <button class="top-tab" onclick="nav('customers')">Customers</button>
       <button class="top-tab" onclick="nav('whatsapp')">WhatsApp</button>
     </div>
     <div class="topbar-right">
@@ -1503,6 +1535,9 @@
       <div class="nav-item" id="snav-estimation" onclick="nav('estimation')"><span class="nav-icon">🧾</span> Estimation
       </div>
       <div class="nav-item" id="snav-sales" onclick="nav('sales')"><span class="nav-icon">📊</span> Sales Report</div>
+      <div class="nav-section">CRM</div>
+      <div class="nav-item" id="snav-customers" onclick="nav('customers')"><span class="nav-icon">👥</span> Customers
+      </div>
       <div class="nav-section">Tools</div>
       <div class="nav-item" id="snav-whatsapp" onclick="nav('whatsapp')"><span class="nav-icon">💬</span> WhatsApp Msgs
       </div>
@@ -1742,6 +1777,32 @@
               </tr>
             </thead>
             <tbody id="sales-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: CUSTOMERS -->
+      <div class="page" id="page-customers">
+        <div class="toolbar">
+          <span class="toolbar-title">Customers</span>
+          <input class="search-box" type="text" id="customer-search" placeholder="Search by name or phone…"
+            oninput="renderCustomers()" style="margin-left: auto; width: 220px;">
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>City</th>
+                <th>Total Orders</th>
+                <th>Total Spent</th>
+                <th>Last Order</th>
+              </tr>
+            </thead>
+            <tbody id="customers-tbody">
+            </tbody>
           </table>
         </div>
       </div>
@@ -2004,6 +2065,7 @@
     // ─── STATE ─────────────────────────────────────────────────────────────────
     let orders = [];
     let stock = [];
+    let customers = [];
     let activeFilter = 'all';
     let estRows = [];
     let selectedPayments = [];
@@ -2048,13 +2110,21 @@
       }
     }
 
+    async function loadCustomers() {
+      try {
+        customers = await apiFetch('/customers');
+      } catch (e) {
+        console.error('Failed to load customers', e);
+      }
+    }
+
     // ─── NAVIGATION ─────────────────────────────────────────────────────────────
     async function nav(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.top-tab,.nav-item').forEach(t => t.classList.remove('active'));
       document.getElementById('page-' + page).classList.add('active');
       const topTabs = document.querySelectorAll('.top-tab');
-      const pages = ['orders', 'designer', 'print', 'stock', 'estimation', 'sales', 'whatsapp'];
+      const pages = ['orders', 'designer', 'print', 'stock', 'estimation', 'sales', 'customers', 'whatsapp'];
       const idx = pages.indexOf(page);
       if (idx >= 0) topTabs[idx].classList.add('active');
       const snav = document.getElementById('snav-' + page);
@@ -2064,6 +2134,7 @@
       if (page === 'print') { await loadOrders(); renderPrint(); }
       if (page === 'stock') { await loadStock(); renderStock(); }
       if (page === 'sales') { await loadOrders(); renderSales(); }
+      if (page === 'customers') { await loadCustomers(); renderCustomers(); }
       if (page === 'estimation') initEstimation();
     }
 
@@ -2588,6 +2659,26 @@
       }).join('');
     }
 
+    function renderCustomers() {
+      const q = (document.getElementById('customer-search')?.value || '').toLowerCase();
+      let list = customers.filter(c =>
+        c.name.toLowerCase().includes(q) || c.phone.includes(q)
+      );
+
+      const tbody = document.getElementById('customers-tbody');
+      if (!list.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No customers found</div></td></tr>'; return; }
+
+      tbody.innerHTML = list.map(c => `<tr onclick="openDetail('${c.phone}')">
+        <td><div class="cell-name">${c.name}</div></td>
+        <td style="font-size:12px;font-family:monospace">${c.phone}</td>
+        <td style="font-size:12px;color:var(--muted)">${c.email || '—'}</td>
+        <td style="font-size:12px">${c.city || '—'}</td>
+        <td><span class="badge b-normal">${c.total_orders || 0}</span></td>
+        <td style="font-weight:600">${fmtINR(c.total_spent || 0)}</td>
+        <td style="font-size:12px;color:var(--muted)">${c.last_order_date ? fmtDate(c.last_order_date) : '—'}</td>
+      </tr>`).join('');
+    }
+
     // ─── WHATSAPP ────────────────────────────────────────────────────────────────
     function copyWA(btn) {
       const box = btn.closest('.wa-card').querySelector('.wa-msg');
@@ -2650,6 +2741,7 @@
       await checkHealth();
       await loadOrders();
       await loadStock();
+      await loadCustomers();
       renderOrders();
       setInterval(checkHealth, 15000);
     })();

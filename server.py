@@ -2,6 +2,30 @@
 RMCP Order System — Flask Backend
 Raj Multi Color Print · Kakinada · ESTD 1983
 Database: PostgreSQL
+
+DATABASE TABLES:
+===============
+
+1. ORDERS - Main order records with customer details and workflow status
+2. STOCK - Inventory management for different card designs
+3. COUNTER - Atomic order ID generator (maintains single row: id=1, val=increment)
+   ├─ PURPOSE: Generate unique sequential order IDs
+   ├─ STRUCTURE: One row (id=1) with incrementing counter (val)
+   ├─ CONSTRAINT: CHECK (id = 1) ensures only one row can exist
+   ├─ USAGE: When creating an order, read val → use for ID → increment val
+   ├─ REASON: Prevents duplicate IDs in concurrent order creation
+   ├─ THREAD-SAFE: db_lock mutex protects read-increment-write operation
+   └─ EXAMPLE: val=5 creates order "WC10340005", then val becomes 6
+
+4. STOCK_HISTORY - Audit trail for all stock movements (ADD/DEDUCT/CREATE actions)
+5. CUSTOMERS - Customer database with contact info and order statistics
+
+CUSTOMER-ORDER SYNC:
+====================
+When an order is created, the customer is automatically:
+1. Added to CUSTOMERS table if new (by phone number)
+2. Updated if existing (name, email, address, city)
+3. Statistics updated: total_orders, total_spent, last_order_date
 """
 
 import os
@@ -104,6 +128,22 @@ def init_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS customers (
+            id          SERIAL PRIMARY KEY,
+            phone       TEXT UNIQUE NOT NULL,
+            name        TEXT NOT NULL,
+            email       TEXT,
+            address     TEXT,
+            city        TEXT,
+            total_orders INTEGER DEFAULT 0,
+            total_spent REAL DEFAULT 0,
+            last_order_date TEXT,
+            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+            updated     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+        )
+    ''')
+
     conn.commit()
     c.close()
     conn.close()
@@ -182,6 +222,30 @@ def log_stock_movement(conn, num, action, old_qty, new_qty, notes=''):
     ''', (num, action, old_qty, new_qty, qty_change, notes))
     c.close()
 
+def upsert_customer(conn, phone, name, email='', address='', city=''):
+    """Add or update customer in customers table."""
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO customers (phone, name, email, address, city, updated)
+        VALUES (%s, %s, %s, %s, %s, to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+        ON CONFLICT (phone) DO UPDATE SET
+            name=%s, email=%s, address=%s, city=%s,
+            updated=to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+    ''', (phone, name, email, address, city, name, email, address, city))
+    c.close()
+
+def update_customer_order_stats(conn, phone, amount):
+    """Update customer's total orders and amount spent."""
+    c = conn.cursor()
+    c.execute('''
+        UPDATE customers SET
+            total_orders = total_orders + 1,
+            total_spent = total_spent + %s,
+            last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+        WHERE phone = %s
+    ''', (amount, phone))
+    c.close()
+
 def gen_id(type_, card, qty, counter):
     prefix    = {'Readymade': 'WC', 'Semi-custom': 'SC'}.get(type_, 'MC')
     card_part = re.sub(r'\D', '', str(card or ''))[:3]
@@ -211,6 +275,16 @@ def create_order():
     with db_lock:
         conn = get_db()
         c = conn.cursor()
+        
+        # Upsert customer data
+        upsert_customer(conn, 
+            phone=data.get('phone',''),
+            name=data.get('name',''),
+            email=data.get('email', ''),
+            address=data.get('address', ''),
+            city=data.get('city', '')
+        )
+        
         c.execute('SELECT val FROM counter WHERE id=1')
         counter  = c.fetchone()['val']
         order_id = data.get('id') or gen_id(
@@ -242,6 +316,10 @@ def create_order():
             data.get('status', 'New'),
             data.get('created', datetime.now().isoformat()),
         ))
+        
+        # Update customer order statistics
+        update_customer_order_stats(conn, data.get('phone',''), float(data.get('amount', 0)))
+        
         conn.commit()
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
@@ -416,6 +494,75 @@ def get_stock_history(num):
     c.close()
     conn.close()
     return jsonify(rows_to_list(rows))
+
+# ─── ROUTES: CUSTOMERS ────────────────────────────────────────────────────────
+@app.route('/api/customers', methods=['GET'])
+def list_customers():
+    """List all customers sorted by last order date."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM customers ORDER BY last_order_date DESC NULLS LAST')
+    rows = c.fetchall()
+    c.close()
+    conn.close()
+    return jsonify(rows_to_list(rows))
+
+@app.route('/api/customers/<phone>', methods=['GET'])
+def get_customer(phone):
+    """Get customer details by phone."""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
+    row = c.fetchone()
+    c.close()
+    conn.close()
+    if not row:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(row_to_dict(row))
+
+@app.route('/api/customers', methods=['POST'])
+def add_customer():
+    """Add or update customer manually."""
+    data = request.get_json()
+    with db_lock:
+        conn = get_db()
+        upsert_customer(conn, 
+            phone=data.get('phone',''),
+            name=data.get('name',''),
+            email=data.get('email', ''),
+            address=data.get('address', ''),
+            city=data.get('city', '')
+        )
+        conn.commit()
+        c = conn.cursor()
+        c.execute('SELECT * FROM customers WHERE phone=%s', (data.get('phone'),))
+        row = c.fetchone()
+        c.close()
+        conn.close()
+    return jsonify(row_to_dict(row)), 201
+
+@app.route('/api/customers/<phone>', methods=['PUT'])
+def update_customer(phone):
+    """Update customer details."""
+    data = request.get_json()
+    with db_lock:
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''
+            UPDATE customers SET
+                name=%s, email=%s, address=%s, city=%s,
+                updated=to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+            WHERE phone=%s
+        ''', (data.get('name'), data.get('email'), data.get('address'), 
+              data.get('city'), phone))
+        conn.commit()
+        c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
+        row = c.fetchone()
+        c.close()
+        conn.close()
+    if not row:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(row_to_dict(row))
 
 # ─── ROUTES: STATS ────────────────────────────────────────────────────────────
 @app.route('/api/stats', methods=['GET'])
