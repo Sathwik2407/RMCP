@@ -2192,7 +2192,7 @@
       const g = document.getElementById('stock-grid');
       if (!stock.length) { g.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div>No stock entries yet</div>'; return; }
       g.innerHTML = stock.map(s => `
-    <div class="stock-card ${s.current < 100 ? 'low-stock' : ''}">
+    <div class="stock-card ${s.current < 100 ? 'low-stock' : ''}" onclick="openStockEdit('${s.num}')" style="cursor:pointer">
       ${s.current < 100 ? '<span class="low-badge">LOW</span>' : ''}
       <div class="stock-num">${s.num}</div>
       <div class="stock-qty">${parseInt(s.current).toLocaleString('en-IN')}</div>
@@ -2204,11 +2204,45 @@
         <span class="price-dealer">Dealer: ₹${s.dealer}</span>
       </div>
       ${s.nop ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Without printing: ₹${s.nop}/pc</div>` : ''}
+      <div style="font-size:11px;color:var(--gold-dark);margin-top:8px;text-align:center;border-top:1px solid var(--paper2);padding-top:6px">✏️ Click to edit / add stock</div>
     </div>`).join('');
     }
 
-    function openStockEntry() { document.getElementById('stock-overlay').classList.add('open'); }
-    function closeStock() { document.getElementById('stock-overlay').classList.remove('open'); }
+    let editingStockNum = null;
+
+    function openStockEntry() {
+      editingStockNum = null;
+      document.querySelector('#stock-overlay .modal-title').textContent = 'Add New Stock';
+      document.querySelector('#stock-overlay .btn-primary').textContent = 'Add to Stock';
+      ['sk-num', 'sk-vendor', 'sk-qty', 'sk-dealer', 'sk-sell', 'sk-nop'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('sk-num').readOnly = false;
+      document.getElementById('sk-qty').placeholder = 'e.g. 1000';
+      document.getElementById('stock-overlay').classList.add('open');
+    }
+
+    function openStockEdit(num) {
+      const s = stock.find(x => x.num === num);
+      if (!s) return;
+      editingStockNum = num;
+      document.querySelector('#stock-overlay .modal-title').textContent = 'Update Stock — ' + num;
+      document.querySelector('#stock-overlay .btn-primary').textContent = 'Update Stock';
+      document.getElementById('sk-num').value = s.num;
+      document.getElementById('sk-num').readOnly = true;
+      document.getElementById('sk-vendor').value = s.vendor;
+      document.getElementById('sk-qty').value = '';
+      document.getElementById('sk-qty').placeholder = 'Qty to ADD (e.g. 500) — leave 0 to only update prices';
+      document.getElementById('sk-dealer').value = s.dealer;
+      document.getElementById('sk-sell').value = s.sell;
+      document.getElementById('sk-nop').value = s.nop || '';
+      document.getElementById('stock-overlay').classList.add('open');
+    }
+
+    function closeStock() {
+      document.getElementById('stock-overlay').classList.remove('open');
+      editingStockNum = null;
+      document.getElementById('sk-num').readOnly = false;
+      document.getElementById('sk-qty').placeholder = 'e.g. 1000';
+    }
 
     async function saveStock() {
       const num = document.getElementById('sk-num').value.trim();
@@ -2217,15 +2251,14 @@
       const sell = parseFloat(document.getElementById('sk-sell').value) || 0;
       const vendor = document.getElementById('sk-vendor').value.trim();
       const nop = parseFloat(document.getElementById('sk-nop').value) || 0;
-      if (!num || !qty || !sell || !vendor) { alert('Fill required fields'); return; }
+      if (!num || !sell || !vendor) { alert('Fill required fields (Card No., Vendor, Sell Price)'); return; }
+      if (!editingStockNum && !qty) { alert('Enter quantity for new stock'); return; }
       try {
         const result = await apiFetch('/stock', { method: 'POST', body: JSON.stringify({ num, qty, dealer, sell, nop, vendor }) });
         const idx = stock.findIndex(s => s.num === num);
         if (idx >= 0) stock[idx] = result; else stock.push(result);
         closeStock();
         renderStock();
-        // Clear form
-        ['sk-num', 'sk-vendor', 'sk-qty', 'sk-dealer', 'sk-sell', 'sk-nop'].forEach(id => document.getElementById(id).value = '');
       } catch (e) { alert('Failed to save stock: ' + e.message); }
     }
 
@@ -2239,15 +2272,23 @@
       const tbody = document.getElementById('est-rows');
       tbody.innerHTML = estRows.map((r, i) => `<tr>
     <td>${i + 1}</td>
-    <td><input value="${r.desc}" oninput="estChange(${i},'desc',this.value)" placeholder="Description" style="width:150px"></td>
-    <td><input value="${r.card}" oninput="estChange(${i},'card',this.value)" placeholder="Card No." style="width:80px"></td>
-    <td><input type="number" value="${r.price}" oninput="estChange(${i},'price',this.value)" placeholder="0" style="width:70px"></td>
-    <td><input type="number" value="${r.qty}" oninput="estChange(${i},'qty',this.value)" placeholder="0" style="width:80px"></td>
-    <td style="font-weight:600">₹${parseInt(r.amount || 0).toLocaleString('en-IN')}</td>
+    <td><input value="${r.desc}" onchange="estChange(${i},'desc',this.value)" placeholder="Description" style="width:150px"></td>
+    <td><input value="${r.card}" onchange="estChange(${i},'card',this.value)" placeholder="Card No." style="width:80px"></td>
+    <td><input type="number" value="${r.price}" onchange="estChange(${i},'price',this.value)" placeholder="0" style="width:70px"></td>
+    <td><input type="number" value="${r.qty}" onchange="estChange(${i},'qty',this.value)" placeholder="0" style="width:80px"></td>
+    <td style="font-weight:600" id="est-amt-${i}">₹${parseInt(r.amount || 0).toLocaleString('en-IN')}</td>
   </tr>`).join('');
       calcEst();
     }
-    function estChange(i, k, v) { estRows[i][k] = v; if (k === 'price' || k === 'qty') estRows[i].amount = (parseFloat(estRows[i].price) || 0) * (parseInt(estRows[i].qty) || 0); renderEstRows(); }
+    function estChange(i, k, v) {
+      estRows[i][k] = v;
+      if (k === 'price' || k === 'qty') {
+        estRows[i].amount = (parseFloat(estRows[i].price) || 0) * (parseInt(estRows[i].qty) || 0);
+        const amtEl = document.getElementById('est-amt-' + i);
+        if (amtEl) amtEl.textContent = '₹' + parseInt(estRows[i].amount || 0).toLocaleString('en-IN');
+      }
+      calcEst();
+    }
     function addEstRow() { estRows.push({ desc: '', card: '', price: '', qty: '', amount: 0 }); renderEstRows(); }
     function calcEst() {
       const sub = estRows.reduce((s, r) => s + (r.amount || 0), 0);
