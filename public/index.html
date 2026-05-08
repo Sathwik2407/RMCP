@@ -2615,31 +2615,33 @@
 
     // ─── STOCK HISTORY ───────────────────────────────────────────────────────────
     async function viewStockHistory(num) {
-      const resp = await apiFetch(`/stock/${num}/history`);
-      if (!resp.ok) return alert('Failed to load history');
-      const history = await resp.json();
+      try {
+        const history = await apiFetch(`/stock/${num}/history`);
 
-      const historyHtml = history.length ? history.map(h => `
-        <div class="drow" style="padding:8px 0;font-size:12px">
-          <span class="dlabel" style="min-width:100px">${fmtDate(h.created)}</span>
-          <div style="flex:1">
-            <div style="font-weight:600;color:var(--ink)">${h.action}</div>
-            <div style="font-size:11px;color:var(--muted)">Qty: ${h.old_qty || '—'} → ${h.new_qty} (${h.qty_change > 0 ? '+' : ''}${h.qty_change})</div>
-            ${h.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.notes}</div>` : ''}
+        const historyHtml = history.length ? history.map(h => `
+          <div class="drow" style="padding:8px 0;font-size:12px">
+            <span class="dlabel" style="min-width:100px">${fmtDate(h.created)}</span>
+            <div style="flex:1">
+              <div style="font-weight:600;color:var(--ink)">${h.action}</div>
+              <div style="font-size:11px;color:var(--muted)">Qty: ${h.old_qty || '—'} → ${h.new_qty} (${h.qty_change > 0 ? '+' : ''}${h.qty_change})</div>
+              ${h.notes ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${h.notes}</div>` : ''}
+            </div>
           </div>
-        </div>
-      `).join('') : '<div class="empty-state" style="padding:20px"><div class="empty-icon">📊</div>No movement history yet</div>';
+        `).join('') : '<div class="empty-state" style="padding:20px"><div class="empty-icon">📊</div>No movement history yet</div>';
 
-      document.getElementById('detail-content').innerHTML = `
-        <div class="modal-head">
-          <div class="modal-title">📊 Stock History: ${num}</div>
-          <button class="modal-close" onclick="closeDetail()">×</button>
-        </div>
-        <div class="modal-body" style="max-height:500px;overflow-y:auto">
-          ${historyHtml}
-        </div>
-      `;
-      document.getElementById('detail-overlay').classList.add('open');
+        document.getElementById('detail-content').innerHTML = `
+          <div class="modal-head">
+            <div class="modal-title">📊 Stock History: ${num}</div>
+            <button class="modal-close" onclick="closeDetail()">×</button>
+          </div>
+          <div class="modal-body" style="max-height:500px;overflow-y:auto">
+            ${historyHtml}
+          </div>
+        `;
+        document.getElementById('detail-overlay').classList.add('open');
+      } catch (e) {
+        alert('Failed to load history: ' + e.message);
+      }
     }
 
     // ─── INIT ────────────────────────────────────────────────────────────────────
