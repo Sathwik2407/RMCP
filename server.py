@@ -238,6 +238,28 @@ def seed_db():
         ''', o)
 
     c.execute('UPDATE counter SET val = 5 WHERE id = 1')
+
+    # Sync customer statistics to match the seeded orders.
+    # Each tuple is (phone, total_orders, total_spent, last_order_date).
+    # These values are computed directly from the orders list above so that
+    # customers who placed multiple demo orders are correctly aggregated.
+    # last_order_date uses NOW() so it always reflects a recent date in dev.
+    seed_stats = [
+        ('99999 99999', 1, 2200,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
+        ('88888 88888', 1, 9000,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
+        ('77777 77777', 1, 97500, "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
+        ('99112233445', 1, 8800,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
+    ]
+    for phone, total_orders, total_spent, _ in seed_stats:
+        c.execute('''
+            UPDATE customers SET
+                total_orders    = %s,
+                total_spent     = %s,
+                last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'),
+                updated         = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+            WHERE phone = %s
+        ''', (total_orders, total_spent, phone))
+
     conn.commit()
     c.close()
     conn.close()
@@ -274,13 +296,35 @@ def upsert_customer(conn, phone, name, email='', address='', city=''):
     return customer_id
 
 def update_customer_order_stats(conn, phone, amount):
-    """Update customer's total orders and amount spent."""
+    """
+    Increment order statistics on the customer row identified by `phone`.
+
+    Behaviour by customer type
+    ──────────────────────────
+    Existing customer:
+        total_orders    → incremented by 1
+        total_spent     → current order amount added to running total
+        last_order_date → updated to now
+
+    New customer (just inserted by upsert_customer with defaults 0/0/NULL):
+        The same UPDATE applies.  The row was inserted with
+        total_orders=0, total_spent=0, last_order_date=NULL, so after
+        this call the values become total_orders=1, total_spent=<amount>,
+        last_order_date=<now> — exactly right for a first order.
+
+    Threading note
+    ──────────────
+    Must always be called inside the same db_lock block as
+    upsert_customer() and INSERT INTO orders so all three writes are
+    committed atomically in create_order().
+    """
     c = conn.cursor()
     c.execute('''
         UPDATE customers SET
-            total_orders = total_orders + 1,
-            total_spent = total_spent + %s,
-            last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+            total_orders    = total_orders + 1,
+            total_spent     = total_spent  + %s,
+            last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'),
+            updated         = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
         WHERE phone = %s
     ''', (amount, phone))
     c.close()
