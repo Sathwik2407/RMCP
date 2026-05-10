@@ -70,9 +70,27 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
+    # Create customers table FIRST (no dependencies)
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS customers (
+            id          SERIAL PRIMARY KEY,
+            phone       TEXT UNIQUE NOT NULL,
+            name        TEXT NOT NULL,
+            email       TEXT,
+            address     TEXT,
+            city        TEXT,
+            total_orders INTEGER DEFAULT 0,
+            total_spent REAL DEFAULT 0,
+            last_order_date TEXT,
+            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+            updated     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+        )
+    ''')
+
     c.execute('''
         CREATE TABLE IF NOT EXISTS orders (
             id          TEXT PRIMARY KEY,
+            customer_id INTEGER,
             name        TEXT NOT NULL,
             phone       TEXT NOT NULL,
             type        TEXT NOT NULL,
@@ -89,8 +107,25 @@ def init_db():
             matter      TEXT,
             commitments TEXT,
             status      TEXT     DEFAULT 'New',
-            created     TEXT     DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+            created     TEXT     DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
         )
+    ''')
+
+    c.execute('ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER')
+    c.execute('''
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'orders_customer_id_fkey'
+            ) THEN
+                ALTER TABLE orders
+                    ADD CONSTRAINT orders_customer_id_fkey
+                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL;
+            END IF;
+        END
+        $$;
     ''')
 
     c.execute('''
@@ -125,22 +160,6 @@ def init_db():
             notes       TEXT,
             created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
             FOREIGN KEY (num) REFERENCES stock(num)
-        )
-    ''')
-
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS customers (
-            id          SERIAL PRIMARY KEY,
-            phone       TEXT UNIQUE NOT NULL,
-            name        TEXT NOT NULL,
-            email       TEXT,
-            address     TEXT,
-            city        TEXT,
-            total_orders INTEGER DEFAULT 0,
-            total_spent REAL DEFAULT 0,
-            last_order_date TEXT,
-            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
-            updated     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
         )
     ''')
 
@@ -180,28 +199,41 @@ def seed_db():
             ON CONFLICT (num) DO NOTHING
         ''', row)
 
+    customer_rows = [
+        ('99999 99999', 'Siddha Venkateswara Rao', 'siddha@example.com', '12 Temple Rd', 'Kakinada'),
+        ('88888 88888', 'Thummala Babu', 'thummala@example.com', '4 River St', 'Kakinada'),
+        ('77777 77777', 'Uppalapati Rudra Raju', 'uppalapati@example.com', '9 Hillside Ln', 'Kakinada'),
+        ('99112233445', 'Lakshmi Prasad', 'lakshmi@example.com', '27 Main Rd', 'Kakinada'),
+    ]
+    for row in customer_rows:
+        c.execute('''
+            INSERT INTO customers (phone, name, email, address, city, updated)
+            VALUES (%s, %s, %s, %s, %s, to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+            ON CONFLICT (phone) DO NOTHING
+        ''', row)
+
     orders = [
-        ('WC10310001','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',
+        ('WC10310001','99999 99999','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',
          date_off(2),'Urgent','Brother 1','Telugu + English, Gold Acrylic plate',
          'Bride: Priya, Groom: Siddha Venkateswara Rao. Parents: Suresh & Lakshmi. Wedding: 25 April 2025. Venue: Sri Kalyana Mandapam.',
          'Delivery on 25th morning 9 AM sharp','Printing'),
-        ('WC10150002','Thummala Babu','88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',
+        ('WC10150002','88888 88888','Thummala Babu','88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',
          date_off(5),'Normal','Brother 2','Two different matters, each 250 cards',
          'Matter 1: Bride: Anitha, Groom: Raju. Matter 2: Bride: Swathi, Groom: Kumar.',
          '','Proof Sent'),
-        ('MC150003','Uppalapati Rudra Raju','77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',
+        ('MC150003','77777 77777','Uppalapati Rudra Raju','77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',
          date_off(12),'Normal','Brother 1','9×9 size, Box Cover, Title with gold foil, Inner two sheets S/S',
          'Full Telugu matter to be provided separately.',
          'Agreed to deliver 2 days early if possible','Design'),
-        ('WC10340004','Lakshmi Prasad','99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',
+        ('WC10340004','99112233445','Lakshmi Prasad','99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',
          date_off(-1),'Urgent','Brother 2','','','','Ready'),
     ]
     for o in orders:
         c.execute('''
             INSERT INTO orders
-              (id,name,phone,type,model,qty,price,amount,advance,payment,
+              (id,customer_id,name,phone,type,model,qty,price,amount,advance,payment,
                delivery,priority,handler,req,matter,commitments,status)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,(SELECT id FROM customers WHERE phone=%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
             ON CONFLICT (id) DO NOTHING
         ''', o)
 
@@ -223,16 +255,23 @@ def log_stock_movement(conn, num, action, old_qty, new_qty, notes=''):
     c.close()
 
 def upsert_customer(conn, phone, name, email='', address='', city=''):
-    """Add or update customer in customers table."""
+    """Add or update customer in customers table. Returns customer id."""
     c = conn.cursor()
     c.execute('''
         INSERT INTO customers (phone, name, email, address, city, updated)
         VALUES (%s, %s, %s, %s, %s, to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
         ON CONFLICT (phone) DO UPDATE SET
-            name=%s, email=%s, address=%s, city=%s,
-            updated=to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
-    ''', (phone, name, email, address, city, name, email, address, city))
+            name = EXCLUDED.name,
+            email = COALESCE(NULLIF(EXCLUDED.email, ''), customers.email),
+            address = COALESCE(NULLIF(EXCLUDED.address, ''), customers.address),
+            city = COALESCE(NULLIF(EXCLUDED.city, ''), customers.city),
+            updated = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+        RETURNING id
+    ''', (phone, name, email, address, city))
+    result = c.fetchone()
+    customer_id = result['id'] if result else None
     c.close()
+    return customer_id
 
 def update_customer_order_stats(conn, phone, amount):
     """Update customer's total orders and amount spent."""
@@ -276,8 +315,8 @@ def create_order():
         conn = get_db()
         c = conn.cursor()
         
-        # Upsert customer data
-        upsert_customer(conn, 
+        # Upsert customer data and capture linked customer ID
+        customer_id = upsert_customer(conn, 
             phone=data.get('phone',''),
             name=data.get('name',''),
             email=data.get('email', ''),
@@ -293,11 +332,12 @@ def create_order():
         c.execute('UPDATE counter SET val = val + 1 WHERE id = 1')
         c.execute('''
             INSERT INTO orders
-              (id,name,phone,type,model,qty,price,amount,advance,payment,
+              (id,customer_id,name,phone,type,model,qty,price,amount,advance,payment,
                delivery,priority,handler,req,matter,commitments,status,created)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
         ''', (
             order_id,
+            customer_id,
             data.get('name',''),
             data.get('phone',''),
             data.get('type',''),
@@ -345,13 +385,21 @@ def update_order(order_id):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
+        customer_id = upsert_customer(conn,
+            phone=data.get('phone',''),
+            name=data.get('name',''),
+            email=data.get('email',''),
+            address=data.get('address',''),
+            city=data.get('city','')
+        )
         c.execute('''
             UPDATE orders SET
-              name=%s, phone=%s, type=%s, model=%s, qty=%s, price=%s,
+              customer_id=%s, name=%s, phone=%s, type=%s, model=%s, qty=%s, price=%s,
               amount=%s, advance=%s, payment=%s, delivery=%s, priority=%s,
               handler=%s, req=%s, matter=%s, commitments=%s, status=%s
             WHERE id=%s
         ''', (
+            customer_id,
             data.get('name'),
             data.get('phone'),
             data.get('type'),

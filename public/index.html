@@ -1602,7 +1602,6 @@
       <button class="top-tab" onclick="nav('stock')">Stock</button>
       <button class="top-tab" onclick="nav('estimation')">Estimation</button>
       <button class="top-tab" onclick="nav('sales')">Sales</button>
-      <button class="top-tab" onclick="nav('customers')">Customers</button>
       <button class="top-tab" onclick="nav('whatsapp')">WhatsApp</button>
     </div>
     <div class="topbar-right">
@@ -1631,9 +1630,6 @@
       <div class="nav-item" id="snav-estimation" onclick="nav('estimation')"><span class="nav-icon">🧾</span> Estimation
       </div>
       <div class="nav-item" id="snav-sales" onclick="nav('sales')"><span class="nav-icon">📊</span> Sales Report</div>
-      <div class="nav-section">CRM</div>
-      <div class="nav-item" id="snav-customers" onclick="nav('customers')"><span class="nav-icon">👥</span> Customers
-      </div>
       <div class="nav-section">Tools</div>
       <div class="nav-item" id="snav-whatsapp" onclick="nav('whatsapp')"><span class="nav-icon">💬</span> WhatsApp Msgs
       </div>
@@ -1873,32 +1869,6 @@
               </tr>
             </thead>
             <tbody id="sales-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- PAGE: CUSTOMERS -->
-      <div class="page" id="page-customers">
-        <div class="toolbar">
-          <span class="toolbar-title">Customers</span>
-          <input class="search-box" type="text" id="customer-search" placeholder="Search by name or phone…"
-            oninput="renderCustomers()" style="margin-left: auto; width: 220px;">
-        </div>
-        <div class="tbl-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Phone</th>
-                <th>Email</th>
-                <th>City</th>
-                <th>Total Orders</th>
-                <th>Total Spent</th>
-                <th>Last Order</th>
-              </tr>
-            </thead>
-            <tbody id="customers-tbody">
-            </tbody>
           </table>
         </div>
       </div>
@@ -2161,7 +2131,6 @@
     // ─── STATE ─────────────────────────────────────────────────────────────────
     let orders = [];
     let stock = [];
-    let customers = [];
     let activeFilter = 'all';
     let estRows = [];
     let selectedPayments = [];
@@ -2206,21 +2175,13 @@
       }
     }
 
-    async function loadCustomers() {
-      try {
-        customers = await apiFetch('/customers');
-      } catch (e) {
-        console.error('Failed to load customers', e);
-      }
-    }
-
     // ─── NAVIGATION ─────────────────────────────────────────────────────────────
     async function nav(page) {
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.top-tab,.nav-item').forEach(t => t.classList.remove('active'));
       document.getElementById('page-' + page).classList.add('active');
       const topTabs = document.querySelectorAll('.top-tab');
-      const pages = ['orders', 'designer', 'print', 'stock', 'estimation', 'sales', 'customers', 'whatsapp'];
+      const pages = ['orders', 'designer', 'print', 'stock', 'estimation', 'sales', 'whatsapp'];
       const idx = pages.indexOf(page);
       if (idx >= 0) topTabs[idx].classList.add('active');
       const snav = document.getElementById('snav-' + page);
@@ -2230,8 +2191,7 @@
       if (page === 'print') { await loadOrders(); renderPrint(); }
       if (page === 'stock') { await loadStock(); renderStock(); }
       if (page === 'sales') { await loadOrders(); renderSales(); }
-      if (page === 'customers') { await loadCustomers(); renderCustomers(); }
-      if (page === 'estimation') initEstimation();
+      if (page === 'whatsapp') { /* render whatsapp templates */ }
     }
 
     // ─── CLOCK ──────────────────────────────────────────────────────────────────
@@ -2755,26 +2715,6 @@
       }).join('');
     }
 
-    function renderCustomers() {
-      const q = (document.getElementById('customer-search')?.value || '').toLowerCase();
-      let list = customers.filter(c =>
-        c.name.toLowerCase().includes(q) || c.phone.includes(q)
-      );
-
-      const tbody = document.getElementById('customers-tbody');
-      if (!list.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No customers found</div></td></tr>'; return; }
-
-      tbody.innerHTML = list.map(c => `<tr onclick="openDetail('${c.phone}')">
-        <td><div class="cell-name">${c.name}</div></td>
-        <td style="font-size:12px;font-family:monospace">${c.phone}</td>
-        <td style="font-size:12px;color:var(--muted)">${c.email || '—'}</td>
-        <td style="font-size:12px">${c.city || '—'}</td>
-        <td><span class="badge b-normal">${c.total_orders || 0}</span></td>
-        <td style="font-weight:600">${fmtINR(c.total_spent || 0)}</td>
-        <td style="font-size:12px;color:var(--muted)">${c.last_order_date ? fmtDate(c.last_order_date) : '—'}</td>
-      </tr>`).join('');
-    }
-
     // ─── WHATSAPP ────────────────────────────────────────────────────────────────
     function copyWA(btn) {
       const box = btn.closest('.wa-card').querySelector('.wa-msg');
@@ -2837,7 +2777,6 @@
       await checkHealth();
       await loadOrders();
       await loadStock();
-      await loadCustomers();
       renderOrders();
       setInterval(checkHealth, 15000);
     })();
