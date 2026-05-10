@@ -245,12 +245,12 @@ def seed_db():
     # customers who placed multiple demo orders are correctly aggregated.
     # last_order_date uses NOW() so it always reflects a recent date in dev.
     seed_stats = [
-        ('99999 99999', 1, 2200,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
-        ('88888 88888', 1, 9000,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
-        ('77777 77777', 1, 97500, "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
-        ('99112233445', 1, 8800,  "to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')"),
+        ('99999 99999', 1, 2200),
+        ('88888 88888', 1, 9000),
+        ('77777 77777', 1, 97500),
+        ('99112233445', 1, 8800),
     ]
-    for phone, total_orders, total_spent, _ in seed_stats:
+    for phone, total_orders, total_spent in seed_stats:
         c.execute('''
             UPDATE customers SET
                 total_orders    = %s,
