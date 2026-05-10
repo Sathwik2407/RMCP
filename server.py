@@ -26,15 +26,29 @@ When an order is created, the customer is automatically:
 1. Added to CUSTOMERS table if new (by phone number)
 2. Updated if existing (name, email, address, city)
 3. Statistics updated: total_orders, total_spent, last_order_date
+
+CONNECTION POOL:
+================
+psycopg2.pool.ThreadedConnectionPool (min=2, max=10).
+All routes use "with get_db() as conn" — connections are always
+returned to the pool, even on errors (no leaks possible).
+
+MONEY COLUMNS:
+==============
+All monetary columns (price, amount, advance, total_spent, dealer,
+sell, nop) use NUMERIC(12,2) to avoid floating-point rounding errors.
+init_db() automatically migrates existing REAL columns on startup.
 """
 
 import os
 import re
 import threading
+from contextlib import contextmanager
 from datetime import date, datetime
 from flask import Flask, request, jsonify, send_from_directory
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 # Railway automatically sets DATABASE_URL when you add a PostgreSQL service
@@ -44,6 +58,8 @@ FRONTEND     = os.path.join(os.path.dirname(__file__), 'public')
 app = Flask(__name__, static_folder=FRONTEND, static_url_path='')
 
 # ─── MULTI-USER SAFETY ────────────────────────────────────────────────────────
+# db_lock serialises the counter read-increment-write and any multi-statement
+# writes that must be atomic (create_order, update_order, delete_order).
 db_lock = threading.Lock()
 
 # ─── CORS ─────────────────────────────────────────────────────────────────────
@@ -59,125 +75,201 @@ def handle_options():
     if request.method == 'OPTIONS':
         return app.make_default_options_response()
 
-# ─── DATABASE CONNECTION ──────────────────────────────────────────────────────
+# ─── CONNECTION POOL ──────────────────────────────────────────────────────────
+# Initialised after the DATABASE_URL check below (module bottom).
+# min=2 keeps two warm connections ready; max=10 caps total Postgres connections.
+_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+
+def _init_pool():
+    global _pool
+    _pool = psycopg2.pool.ThreadedConnectionPool(
+        minconn=2,
+        maxconn=10,
+        dsn=DATABASE_URL,
+        cursor_factory=psycopg2.extras.RealDictCursor,
+    )
+
+@contextmanager
 def get_db():
-    """Get a fresh PostgreSQL connection."""
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    return conn
+    """Yield a pooled connection and guarantee it is returned to the pool.
+
+    Usage (replaces the old bare get_db() calls):
+
+        with get_db() as conn:
+            c = conn.cursor()
+            ...
+            conn.commit()   # only in write routes
+
+    The connection is always returned to the pool — even if an exception is
+    raised mid-route — so no connection leaks are possible.
+    """
+    conn = _pool.getconn()
+    try:
+        yield conn
+    except Exception:
+        conn.rollback()   # discard any partial writes on error
+        raise
+    finally:
+        _pool.putconn(conn)
 
 def init_db():
-    """Create all tables if they don't exist."""
-    conn = get_db()
-    c = conn.cursor()
+    """Create all tables and apply any pending column-type migrations."""
+    with get_db() as conn:
+        c = conn.cursor()
 
-    # Create customers table FIRST (no dependencies)
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS customers (
-            id          SERIAL PRIMARY KEY,
-            phone       TEXT UNIQUE NOT NULL,
-            name        TEXT NOT NULL,
-            email       TEXT,
-            address     TEXT,
-            city        TEXT,
-            total_orders INTEGER DEFAULT 0,
-            total_spent REAL DEFAULT 0,
-            last_order_date TEXT,
-            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
-            updated     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
-        )
-    ''')
+        # Create customers table FIRST (no dependencies)
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id          SERIAL PRIMARY KEY,
+                phone       TEXT UNIQUE NOT NULL,
+                name        TEXT NOT NULL,
+                email       TEXT,
+                address     TEXT,
+                city        TEXT,
+                total_orders INTEGER DEFAULT 0,
+                total_spent NUMERIC(12,2) DEFAULT 0,
+                last_order_date TEXT,
+                created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+                updated     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+            )
+        ''')
 
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id          TEXT PRIMARY KEY,
-            customer_id INTEGER,
-            name        TEXT NOT NULL,
-            phone       TEXT NOT NULL,
-            type        TEXT NOT NULL,
-            model       TEXT,
-            qty         INTEGER  DEFAULT 0,
-            price       REAL     DEFAULT 0,
-            amount      REAL     DEFAULT 0,
-            advance     REAL     DEFAULT 0,
-            payment     TEXT,
-            delivery    TEXT,
-            priority    TEXT     DEFAULT 'Normal',
-            handler     TEXT,
-            req         TEXT,
-            matter      TEXT,
-            commitments TEXT,
-            status      TEXT     DEFAULT 'New',
-            created     TEXT     DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
-            FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
-        )
-    ''')
+        # Migrate existing total_spent column from REAL → NUMERIC(12,2)
+        c.execute('''
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='customers' AND column_name='total_spent'
+                      AND data_type='real'
+                ) THEN
+                    ALTER TABLE customers
+                        ALTER COLUMN total_spent TYPE NUMERIC(12,2)
+                        USING ROUND(total_spent::NUMERIC, 2);
+                END IF;
+            END $$;
+        ''')
 
-    c.execute('ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER')
-    c.execute('''
-        DO $$
-        BEGIN
-            IF NOT EXISTS (
-                SELECT 1 FROM pg_constraint
-                WHERE conname = 'orders_customer_id_fkey'
-            ) THEN
-                ALTER TABLE orders
-                    ADD CONSTRAINT orders_customer_id_fkey
-                    FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL;
-            END IF;
-        END
-        $$;
-    ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id          TEXT PRIMARY KEY,
+                customer_id INTEGER,
+                name        TEXT NOT NULL,
+                phone       TEXT NOT NULL,
+                type        TEXT NOT NULL,
+                model       TEXT,
+                qty         INTEGER        DEFAULT 0,
+                price       NUMERIC(12,2)  DEFAULT 0,
+                amount      NUMERIC(12,2)  DEFAULT 0,
+                advance     NUMERIC(12,2)  DEFAULT 0,
+                payment     TEXT,
+                delivery    TEXT,
+                priority    TEXT           DEFAULT 'Normal',
+                handler     TEXT,
+                req         TEXT,
+                matter      TEXT,
+                commitments TEXT,
+                status      TEXT           DEFAULT 'New',
+                created     TEXT           DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+                FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+            )
+        ''')
 
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS stock (
-            num     TEXT PRIMARY KEY,
-            arrived INTEGER DEFAULT 0,
-            current INTEGER DEFAULT 0,
-            dealer  REAL    DEFAULT 0,
-            sell    REAL    DEFAULT 0,
-            nop     REAL    DEFAULT 0,
-            vendor  TEXT
-        )
-    ''')
+        # Migrate existing money columns in orders from REAL → NUMERIC(12,2)
+        c.execute('''
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='orders' AND column_name='amount'
+                      AND data_type='real'
+                ) THEN
+                    ALTER TABLE orders
+                        ALTER COLUMN price   TYPE NUMERIC(12,2) USING ROUND(price::NUMERIC,   2),
+                        ALTER COLUMN amount  TYPE NUMERIC(12,2) USING ROUND(amount::NUMERIC,  2),
+                        ALTER COLUMN advance TYPE NUMERIC(12,2) USING ROUND(advance::NUMERIC, 2);
+                END IF;
+            END $$;
+        ''')
 
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS counter (
-            id  INTEGER PRIMARY KEY,
-            val INTEGER DEFAULT 1,
-            CONSTRAINT counter_one_row CHECK (id = 1)
-        )
-    ''')
-    c.execute('INSERT INTO counter (id, val) VALUES (1, 1) ON CONFLICT (id) DO NOTHING')
+        c.execute('ALTER TABLE orders ADD COLUMN IF NOT EXISTS customer_id INTEGER')
+        c.execute('''
+            DO $$
+            BEGIN
+                IF NOT EXISTS (
+                    SELECT 1 FROM pg_constraint
+                    WHERE conname = 'orders_customer_id_fkey'
+                ) THEN
+                    ALTER TABLE orders
+                        ADD CONSTRAINT orders_customer_id_fkey
+                        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL;
+                END IF;
+            END
+            $$;
+        ''')
 
-    c.execute('''
-        CREATE TABLE IF NOT EXISTS stock_history (
-            id          SERIAL PRIMARY KEY,
-            num         TEXT NOT NULL,
-            action      TEXT NOT NULL,
-            old_qty     INTEGER,
-            new_qty     INTEGER,
-            qty_change  INTEGER,
-            notes       TEXT,
-            created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
-            FOREIGN KEY (num) REFERENCES stock(num)
-        )
-    ''')
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS stock (
+                num     TEXT PRIMARY KEY,
+                arrived INTEGER        DEFAULT 0,
+                current INTEGER        DEFAULT 0,
+                dealer  NUMERIC(12,2)  DEFAULT 0,
+                sell    NUMERIC(12,2)  DEFAULT 0,
+                nop     NUMERIC(12,2)  DEFAULT 0,
+                vendor  TEXT
+            )
+        ''')
 
-    conn.commit()
-    c.close()
-    conn.close()
+        # Migrate existing price columns in stock from REAL → NUMERIC(12,2)
+        c.execute('''
+            DO $$ BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_name='stock' AND column_name='dealer'
+                      AND data_type='real'
+                ) THEN
+                    ALTER TABLE stock
+                        ALTER COLUMN dealer TYPE NUMERIC(12,2) USING ROUND(dealer::NUMERIC, 2),
+                        ALTER COLUMN sell   TYPE NUMERIC(12,2) USING ROUND(sell::NUMERIC,   2),
+                        ALTER COLUMN nop    TYPE NUMERIC(12,2) USING ROUND(nop::NUMERIC,    2);
+                END IF;
+            END $$;
+        ''')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS counter (
+                id  INTEGER PRIMARY KEY,
+                val INTEGER DEFAULT 1,
+                CONSTRAINT counter_one_row CHECK (id = 1)
+            )
+        ''')
+        c.execute('INSERT INTO counter (id, val) VALUES (1, 1) ON CONFLICT (id) DO NOTHING')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS stock_history (
+                id          SERIAL PRIMARY KEY,
+                num         TEXT NOT NULL,
+                action      TEXT NOT NULL,
+                old_qty     INTEGER,
+                new_qty     INTEGER,
+                qty_change  INTEGER,
+                notes       TEXT,
+                created     TEXT DEFAULT (to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')),
+                FOREIGN KEY (num) REFERENCES stock(num)
+            )
+        ''')
+
+        conn.commit()
+        c.close()
     print('✅ Database tables ready')
 
 def seed_db():
     """Seed demo data only if orders table is empty."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT COUNT(*) FROM orders')
-    count = c.fetchone()['count']
-    if count > 0:
-        c.close()
-        conn.close()
-        return
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM orders')
+        count = c.fetchone()['count']
+        if count > 0:
+            c.close()
+            return
 
     def date_off(days):
         from datetime import timedelta
@@ -260,9 +352,8 @@ def seed_db():
             WHERE phone = %s
         ''', (total_orders, total_spent, phone))
 
-    conn.commit()
-    c.close()
-    conn.close()
+        conn.commit()
+        c.close()
     print('✅ Demo data seeded')
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
@@ -344,19 +435,17 @@ def rows_to_list(rows):
 # ─── ROUTES: ORDERS ───────────────────────────────────────────────────────────
 @app.route('/api/orders', methods=['GET'])
 def list_orders():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM orders ORDER BY created DESC')
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM orders ORDER BY created DESC')
+        rows = c.fetchall()
+        c.close()
     return jsonify(rows_to_list(rows))
 
 @app.route('/api/orders', methods=['POST'])
 def create_order():
     data = request.get_json()
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         
         # Upsert customer data and capture linked customer ID
@@ -408,17 +497,15 @@ def create_order():
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
         c.close()
-        conn.close()
     return jsonify(row_to_dict(row)), 201
 
 @app.route('/api/orders/<order_id>', methods=['GET'])
 def get_order(order_id):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
-    row = c.fetchone()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
+        row = c.fetchone()
+        c.close()
     if not row:
         return jsonify({'error': 'Not found'}), 404
     return jsonify(row_to_dict(row))
@@ -426,8 +513,7 @@ def get_order(order_id):
 @app.route('/api/orders/<order_id>', methods=['PUT'])
 def update_order(order_id):
     data = request.get_json()
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
 
         # BUG FIX: fetch the current order so we can adjust customer stats correctly.
@@ -507,28 +593,24 @@ def update_order(order_id):
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
         c.close()
-        conn.close()
     return jsonify(row_to_dict(row))
 
 @app.route('/api/orders/<order_id>/status', methods=['PATCH'])
 def patch_status(order_id):
     data   = request.get_json()
     status = data.get('status')
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         c.execute('UPDATE orders SET status=%s WHERE id=%s', (status, order_id))
         conn.commit()
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
         c.close()
-        conn.close()
     return jsonify(row_to_dict(row))
 
 @app.route('/api/orders/<order_id>', methods=['DELETE'])
 def delete_order(order_id):
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
 
         # BUG FIX: capture the order's phone and amount BEFORE deleting so we
@@ -553,18 +635,16 @@ def delete_order(order_id):
 
         conn.commit()
         c.close()
-        conn.close()
     return jsonify({'deleted': order_id})
 
 # ─── ROUTES: STOCK ────────────────────────────────────────────────────────────
 @app.route('/api/stock', methods=['GET'])
 def list_stock():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM stock ORDER BY num')
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM stock ORDER BY num')
+        rows = c.fetchall()
+        c.close()
     return jsonify(rows_to_list(rows))
 
 @app.route('/api/stock', methods=['POST'])
@@ -576,8 +656,7 @@ def upsert_stock():
     sell   = float(data.get('sell', 0))
     nop    = float(data.get('nop', 0))
     vendor = data.get('vendor','').strip()
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         c.execute('SELECT num, current FROM stock WHERE num=%s', (num,))
         existing = c.fetchone()
@@ -601,20 +680,18 @@ def upsert_stock():
         c.execute('SELECT * FROM stock WHERE num=%s', (num,))
         row = c.fetchone()
         c.close()
-        conn.close()
     return jsonify(row_to_dict(row)), 201
 
 @app.route('/api/stock/<num>/deduct', methods=['PATCH'])
 def deduct_stock(num):
     data = request.get_json()
     qty = int(data.get('qty', 0))
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         c.execute('SELECT current FROM stock WHERE num=%s', (num,))
         row = c.fetchone()
         if not row:
-            c.close(); conn.close()
+            c.close()
             return jsonify({'error': 'Stock item not found'}), 404
         old_qty = row['current']
         new_current = max(0, old_qty - qty)
@@ -623,52 +700,47 @@ def deduct_stock(num):
         conn.commit()
         c.execute('SELECT * FROM stock WHERE num=%s', (num,))
         updated = c.fetchone()
-        c.close(); conn.close()
+        c.close()
     return jsonify(row_to_dict(updated))
 
 @app.route('/api/stock/<num>', methods=['DELETE'])
 def delete_stock(num):
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         c.execute('DELETE FROM stock WHERE num=%s', (num,))
         conn.commit()
         c.close()
-        conn.close()
     return jsonify({'deleted': num})
 
 @app.route('/api/stock/<num>/history', methods=['GET'])
 def get_stock_history(num):
     """Get stock movement history for a specific item."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM stock_history WHERE num=%s ORDER BY created DESC', (num,))
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM stock_history WHERE num=%s ORDER BY created DESC', (num,))
+        rows = c.fetchall()
+        c.close()
     return jsonify(rows_to_list(rows))
 
 # ─── ROUTES: CUSTOMERS ────────────────────────────────────────────────────────
 @app.route('/api/customers', methods=['GET'])
 def list_customers():
     """List all customers sorted by last order date."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM customers ORDER BY last_order_date DESC NULLS LAST')
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM customers ORDER BY last_order_date DESC NULLS LAST')
+        rows = c.fetchall()
+        c.close()
     return jsonify(rows_to_list(rows))
 
 @app.route('/api/customers/<phone>', methods=['GET'])
 def get_customer(phone):
     """Get customer details by phone."""
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
-    row = c.fetchone()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
+        row = c.fetchone()
+        c.close()
     if not row:
         return jsonify({'error': 'Not found'}), 404
     return jsonify(row_to_dict(row))
@@ -677,9 +749,8 @@ def get_customer(phone):
 def add_customer():
     """Add or update customer manually."""
     data = request.get_json()
-    with db_lock:
-        conn = get_db()
-        upsert_customer(conn, 
+    with db_lock, get_db() as conn:
+        upsert_customer(conn,
             phone=data.get('phone',''),
             name=data.get('name',''),
             email=data.get('email', ''),
@@ -691,28 +762,25 @@ def add_customer():
         c.execute('SELECT * FROM customers WHERE phone=%s', (data.get('phone'),))
         row = c.fetchone()
         c.close()
-        conn.close()
     return jsonify(row_to_dict(row)), 201
 
 @app.route('/api/customers/<phone>', methods=['PUT'])
 def update_customer(phone):
     """Update customer details."""
     data = request.get_json()
-    with db_lock:
-        conn = get_db()
+    with db_lock, get_db() as conn:
         c = conn.cursor()
         c.execute('''
             UPDATE customers SET
                 name=%s, email=%s, address=%s, city=%s,
                 updated=to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
             WHERE phone=%s
-        ''', (data.get('name'), data.get('email'), data.get('address'), 
+        ''', (data.get('name'), data.get('email'), data.get('address'),
               data.get('city'), phone))
         conn.commit()
         c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
         row = c.fetchone()
         c.close()
-        conn.close()
     if not row:
         return jsonify({'error': 'Not found'}), 404
     return jsonify(row_to_dict(row))
@@ -720,33 +788,39 @@ def update_customer(phone):
 # ─── ROUTES: STATS ────────────────────────────────────────────────────────────
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM orders WHERE status != 'Delivered'")
-    active        = c.fetchall()
-    total_amount  = sum(r['amount']  or 0 for r in active)
-    total_advance = sum(r['advance'] or 0 for r in active)
-    stats = {
-        'active':   len(active),
-        'urgent':   sum(1 for r in active if r['priority'] == 'Urgent'),
-        'design':   sum(1 for r in active if r['status'] in ('Design', 'Proof Sent')),
-        'printing': sum(1 for r in active if r['status'] == 'Printing'),
-        'ready':    sum(1 for r in active if r['status'] == 'Ready'),
-        'balance':  total_amount - total_advance,
-    }
-    c.close()
-    conn.close()
-    return jsonify(stats)
+    """Return dashboard summary counts — all aggregation done in SQL, not Python."""
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('''
+            SELECT
+                COUNT(*)                                                         AS active,
+                COUNT(*) FILTER (WHERE priority = 'Urgent')                     AS urgent,
+                COUNT(*) FILTER (WHERE status IN ('Design', 'Proof Sent'))      AS design,
+                COUNT(*) FILTER (WHERE status = 'Printing')                     AS printing,
+                COUNT(*) FILTER (WHERE status = 'Ready')                        AS ready,
+                COALESCE(SUM(amount),  0) - COALESCE(SUM(advance), 0)           AS balance
+            FROM orders
+            WHERE status != 'Delivered'
+        ''')
+        row = c.fetchone()
+        c.close()
+    return jsonify({
+        'active':   int(row['active']),
+        'urgent':   int(row['urgent']),
+        'design':   int(row['design']),
+        'printing': int(row['printing']),
+        'ready':    int(row['ready']),
+        'balance':  float(row['balance']),
+    })
 
 # ─── ROUTES: COUNTER ──────────────────────────────────────────────────────────
 @app.route('/api/counter', methods=['GET'])
 def get_counter():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT val FROM counter WHERE id=1')
-    val = c.fetchone()['val']
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT val FROM counter WHERE id=1')
+        val = c.fetchone()['val']
+        c.close()
     return jsonify({'counter': val})
 
 # ─── ROUTES: EXPORT ───────────────────────────────────────────────────────────
@@ -759,12 +833,11 @@ def export_orders_csv():
     if not export_key or secret != export_key:
         return jsonify({'error': 'Unauthorized'}), 401
     import csv, io
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM orders ORDER BY created DESC')
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM orders ORDER BY created DESC')
+        rows = c.fetchall()
+        c.close()
     si = io.StringIO()
     writer = csv.writer(si)
     writer.writerow(['ID','Name','Phone','Type','Model','Qty','Price','Amount',
@@ -791,12 +864,11 @@ def export_stock_csv():
     if not export_key or secret != export_key:
         return jsonify({'error': 'Unauthorized'}), 401
     import csv, io
-    conn = get_db()
-    c = conn.cursor()
-    c.execute('SELECT * FROM stock ORDER BY num')
-    rows = c.fetchall()
-    c.close()
-    conn.close()
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute('SELECT * FROM stock ORDER BY num')
+        rows = c.fetchall()
+        c.close()
     si = io.StringIO()
     writer = csv.writer(si)
     writer.writerow(['Card No.','Arrived','Current Stock','Dealer Price',
@@ -830,6 +902,7 @@ if not DATABASE_URL:
         'Add a PostgreSQL service in Railway and redeploy.'
     )
 
+_init_pool()   # must come before init_db() and seed_db()
 init_db()
 seed_db()
 
