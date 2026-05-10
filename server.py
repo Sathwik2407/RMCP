@@ -429,8 +429,19 @@ def update_order(order_id):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
+
+        # BUG FIX: fetch the current order so we can adjust customer stats correctly.
+        # We need the old phone (customer may change) and the old amount.
+        c.execute('SELECT phone, amount FROM orders WHERE id=%s', (order_id,))
+        old_order = c.fetchone()
+        old_phone  = old_order['phone']  if old_order else None
+        old_amount = float(old_order['amount']) if old_order else 0.0
+
+        new_phone  = data.get('phone', '')
+        new_amount = float(data.get('amount', 0))
+
         customer_id = upsert_customer(conn,
-            phone=data.get('phone',''),
+            phone=new_phone,
             name=data.get('name',''),
             email=data.get('email',''),
             address=data.get('address',''),
@@ -445,12 +456,12 @@ def update_order(order_id):
         ''', (
             customer_id,
             data.get('name'),
-            data.get('phone'),
+            new_phone,
             data.get('type'),
             data.get('model'),
             int(data.get('qty', 0)),
             float(data.get('price', 0)),
-            float(data.get('amount', 0)),
+            new_amount,
             float(data.get('advance', 0)),
             data.get('payment'),
             data.get('delivery'),
@@ -462,6 +473,36 @@ def update_order(order_id):
             data.get('status'),
             order_id,
         ))
+
+        # BUG FIX: keep customer stats in sync when the order amount or phone changes.
+        if old_phone and old_phone != new_phone:
+            # Customer reassigned: undo the order on the old customer, credit new one.
+            c.execute('''
+                UPDATE customers SET
+                    total_orders = GREATEST(total_orders - 1, 0),
+                    total_spent  = GREATEST(total_spent  - %s, 0),
+                    updated      = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+                WHERE phone = %s
+            ''', (old_amount, old_phone))
+            # Add to the new customer (they may be brand-new via upsert_customer above,
+            # so total_orders starts at 0 — incrementing gives the correct value of 1).
+            c.execute('''
+                UPDATE customers SET
+                    total_orders    = total_orders + 1,
+                    total_spent     = total_spent  + %s,
+                    last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'),
+                    updated         = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+                WHERE phone = %s
+            ''', (new_amount, new_phone))
+        elif old_phone and old_amount != new_amount:
+            # Same customer, only the amount changed — adjust the running total.
+            c.execute('''
+                UPDATE customers SET
+                    total_spent = GREATEST(total_spent - %s + %s, 0),
+                    updated     = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+                WHERE phone = %s
+            ''', (old_amount, new_amount, new_phone))
+
         conn.commit()
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
@@ -489,7 +530,27 @@ def delete_order(order_id):
     with db_lock:
         conn = get_db()
         c = conn.cursor()
+
+        # BUG FIX: capture the order's phone and amount BEFORE deleting so we
+        # can subtract them from the customer's running totals.
+        c.execute('SELECT phone, amount FROM orders WHERE id=%s', (order_id,))
+        order = c.fetchone()
+
         c.execute('DELETE FROM orders WHERE id=%s', (order_id,))
+
+        if order:
+            phone  = order['phone']
+            amount = float(order['amount'] or 0)
+            # Decrement stats; GREATEST(..., 0) prevents going negative from
+            # any historical data inconsistency.
+            c.execute('''
+                UPDATE customers SET
+                    total_orders = GREATEST(total_orders - 1, 0),
+                    total_spent  = GREATEST(total_spent  - %s, 0),
+                    updated      = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+                WHERE phone = %s
+            ''', (amount, phone))
+
         conn.commit()
         c.close()
         conn.close()
@@ -692,7 +753,10 @@ def get_counter():
 @app.route('/api/export/orders.csv')
 def export_orders_csv():
     secret = request.args.get('key','')
-    if secret != os.environ.get('EXPORT_KEY', 'rmcp2024'):
+    # BUG FIX: no fallback default — if EXPORT_KEY is not set, deny all requests
+    # rather than silently accepting the old hardcoded password.
+    export_key = os.environ.get('EXPORT_KEY', '')
+    if not export_key or secret != export_key:
         return jsonify({'error': 'Unauthorized'}), 401
     import csv, io
     conn = get_db()
@@ -723,7 +787,8 @@ def export_orders_csv():
 @app.route('/api/export/stock.csv')
 def export_stock_csv():
     secret = request.args.get('key','')
-    if secret != os.environ.get('EXPORT_KEY', 'rmcp2024'):
+    export_key = os.environ.get('EXPORT_KEY', '')
+    if not export_key or secret != export_key:
         return jsonify({'error': 'Unauthorized'}), 401
     import csv, io
     conn = get_db()
@@ -756,14 +821,19 @@ def serve_static(path):
     return send_from_directory(FRONTEND, path)
 
 # ─── MAIN ─────────────────────────────────────────────────────────────────────
-# ─── MAIN ─────────────────────────────────────────────────────────────────────
+# BUG FIX: check DATABASE_URL at module level so gunicorn (which never enters
+# the __main__ block) also fails fast with a clear message instead of a
+# cryptic psycopg2 OperationalError on the first incoming request.
+if not DATABASE_URL:
+    raise RuntimeError(
+        '❌  DATABASE_URL environment variable is not set. '
+        'Add a PostgreSQL service in Railway and redeploy.'
+    )
+
 init_db()
 seed_db()
 
 if __name__ == '__main__':
-    if not DATABASE_URL:
-        print('❌  ERROR: DATABASE_URL environment variable is not set.')
-        exit(1)
     port = int(os.environ.get('PORT', 5050))
     print(f'\n✅  RMCP Backend running at http://localhost:{port}')
     print(f'   Database : PostgreSQL')
