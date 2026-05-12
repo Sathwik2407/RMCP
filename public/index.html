@@ -441,6 +441,20 @@
       white-space: nowrap;
     }
 
+    .sort-arrow {
+      display: inline-block;
+      margin-left: 4px;
+      font-size: 10px;
+      color: var(--gold);
+      min-width: 12px;
+      text-align: center;
+    }
+
+    th:hover {
+      background: var(--paper3);
+      color: var(--gold);
+    }
+
     td {
       padding: 12px 14px;
       font-size: 13px;
@@ -1738,28 +1752,34 @@
         <div class="toolbar">
           <span class="toolbar-title">Stock Inventory</span>
           <input class="search-box" type="text" id="stock-search" placeholder="Search card number or vendor…"
-            oninput="renderStock()" style="width: 220px;">
-          <div style="display: flex; gap: 6px; margin-left: auto;">
-            <button class="filter-pill" onclick="stockSortBy('num'); renderStock()" id="sort-num">🔤 Number</button>
-            <button class="filter-pill" onclick="stockSortBy('current'); renderStock()" id="sort-qty">📦
-              Quantity</button>
-            <button class="filter-pill" onclick="stockSortBy('sell'); renderStock()" id="sort-price">💰 Price</button>
-            <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:10px">+ Add Stock</button>
-          </div>
+            oninput="renderStock()" style="width: 220px; margin-left: auto;">
+          <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:10px">+ Add Stock</button>
         </div>
         <div id="low-stock-alert"></div>
         <div class="tbl-wrap">
           <table id="stock-table">
             <thead>
               <tr>
-                <th style="width:100px">Card #</th>
-                <th style="width:80px">Current</th>
-                <th style="width:80px">Arrived</th>
-                <th style="width:100px">Sell Price</th>
-                <th style="width:100px">Dealer Price</th>
-                <th style="width:90px">W/o Print</th>
-                <th style="width:140px">Vendor</th>
-                <th style="width:120px">Actions</th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="stockSortBy('num'); renderStock()"><span>Card #</span><span id="sort-arrow-num"
+                    class="sort-arrow"></span></th>
+                <th style="width:80px; cursor: pointer; user-select: none;"
+                  onclick="stockSortBy('current'); renderStock()"><span>Current</span><span id="sort-arrow-current"
+                    class="sort-arrow"></span></th>
+                <th style="width:80px; cursor: pointer; user-select: none;"
+                  onclick="stockSortBy('arrived'); renderStock()"><span>Arrived</span><span id="sort-arrow-arrived"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="stockSortBy('sell'); renderStock()"><span>Sell Price</span><span id="sort-arrow-sell"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="stockSortBy('dealer'); renderStock()"><span>Dealer Price</span><span id="sort-arrow-dealer"
+                    class="sort-arrow"></span></th>
+                <th style="width:90px; cursor: pointer; user-select: none;" onclick="stockSortBy('nop'); renderStock()">
+                  <span>W/o Print</span><span id="sort-arrow-nop" class="sort-arrow"></span>
+                </th>
+                <th style="width:140px;">Vendor</th>
+                <th style="width:120px;">Actions</th>
               </tr>
             </thead>
             <tbody id="stock-tbody">
@@ -2516,20 +2536,27 @@
         stockSortField = field;
         stockSortAsc = true;
       }
-      // Update active sort button
-      document.querySelectorAll('[id^="sort-"]').forEach(btn => btn.classList.remove('active'));
-      const sortBtnMap = { num: 'sort-num', current: 'sort-qty', sell: 'sort-price' };
-      if (sortBtnMap[field]) {
-        document.getElementById(sortBtnMap[field]).classList.add('active');
-        // Add arrow indicator
-        const arrowText = stockSortAsc ? '↑' : '↓';
-        document.getElementById(sortBtnMap[field]).textContent =
-          document.getElementById(sortBtnMap[field]).textContent.split('↑').join('').split('↓').join('') + ' ' + arrowText;
+
+      // Clear all sort arrows
+      document.querySelectorAll('.sort-arrow').forEach(arrow => arrow.textContent = '');
+
+      // Set the arrow for the active column
+      const arrowElement = document.getElementById('sort-arrow-' + field);
+      if (arrowElement) {
+        arrowElement.textContent = stockSortAsc ? '↑' : '↓';
       }
     }
 
     function renderStock() {
       const searchVal = (document.getElementById('stock-search')?.value || '').toLowerCase();
+
+      // Display current sort arrow
+      document.querySelectorAll('.sort-arrow').forEach(arrow => arrow.textContent = '');
+      const arrowElement = document.getElementById('sort-arrow-' + stockSortField);
+      if (arrowElement) {
+        arrowElement.textContent = stockSortAsc ? '↑' : '↓';
+      }
+
       const filtered = stock.filter(s =>
         s.num.toLowerCase().includes(searchVal) ||
         (s.vendor && s.vendor.toLowerCase().includes(searchVal))
@@ -2541,7 +2568,7 @@
         let bVal = b[stockSortField];
 
         // Handle numeric sorting
-        if (stockSortField === 'current' || stockSortField === 'sell' || stockSortField === 'dealer') {
+        if (stockSortField === 'current' || stockSortField === 'arrived' || stockSortField === 'sell' || stockSortField === 'dealer' || stockSortField === 'nop') {
           aVal = parseFloat(aVal) || 0;
           bVal = parseFloat(bVal) || 0;
         } else {
