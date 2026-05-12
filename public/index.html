@@ -1737,12 +1737,35 @@
       <div class="page" id="page-stock">
         <div class="toolbar">
           <span class="toolbar-title">Stock Inventory</span>
-          <input class="search-box" type="text" id="stock-search" placeholder="Search card number…"
-            oninput="renderStock()" style="margin-left: auto; width: 220px;">
-          <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:10px">+ Add Stock</button>
+          <input class="search-box" type="text" id="stock-search" placeholder="Search card number or vendor…"
+            oninput="renderStock()" style="width: 220px;">
+          <div style="display: flex; gap: 6px; margin-left: auto;">
+            <button class="filter-pill" onclick="stockSortBy('num'); renderStock()" id="sort-num">🔤 Number</button>
+            <button class="filter-pill" onclick="stockSortBy('current'); renderStock()" id="sort-qty">📦
+              Quantity</button>
+            <button class="filter-pill" onclick="stockSortBy('sell'); renderStock()" id="sort-price">💰 Price</button>
+            <button class="btn btn-primary" onclick="openStockEntry()" style="margin-left:10px">+ Add Stock</button>
+          </div>
         </div>
         <div id="low-stock-alert"></div>
-        <div class="stock-grid" id="stock-grid"></div>
+        <div class="tbl-wrap">
+          <table id="stock-table">
+            <thead>
+              <tr>
+                <th style="width:100px">Card #</th>
+                <th style="width:80px">Current</th>
+                <th style="width:80px">Arrived</th>
+                <th style="width:100px">Sell Price</th>
+                <th style="width:100px">Dealer Price</th>
+                <th style="width:90px">W/o Print</th>
+                <th style="width:140px">Vendor</th>
+                <th style="width:120px">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="stock-tbody">
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <!-- PAGE: ESTIMATION -->
@@ -2483,33 +2506,80 @@
     }
 
     // ─── STOCK ───────────────────────────────────────────────────────────────────
+    let stockSortField = 'num';
+    let stockSortAsc = true;
+
+    function stockSortBy(field) {
+      if (stockSortField === field) {
+        stockSortAsc = !stockSortAsc; // Toggle ascending/descending
+      } else {
+        stockSortField = field;
+        stockSortAsc = true;
+      }
+      // Update active sort button
+      document.querySelectorAll('[id^="sort-"]').forEach(btn => btn.classList.remove('active'));
+      const sortBtnMap = { num: 'sort-num', current: 'sort-qty', sell: 'sort-price' };
+      if (sortBtnMap[field]) {
+        document.getElementById(sortBtnMap[field]).classList.add('active');
+        // Add arrow indicator
+        const arrowText = stockSortAsc ? '↑' : '↓';
+        document.getElementById(sortBtnMap[field]).textContent =
+          document.getElementById(sortBtnMap[field]).textContent.split('↑').join('').split('↓').join('') + ' ' + arrowText;
+      }
+    }
+
     function renderStock() {
       const searchVal = (document.getElementById('stock-search')?.value || '').toLowerCase();
-      const filtered = stock.filter(s => s.num.toLowerCase().includes(searchVal));
+      const filtered = stock.filter(s =>
+        s.num.toLowerCase().includes(searchVal) ||
+        (s.vendor && s.vendor.toLowerCase().includes(searchVal))
+      );
+
+      // Sort
+      filtered.sort((a, b) => {
+        let aVal = a[stockSortField];
+        let bVal = b[stockSortField];
+
+        // Handle numeric sorting
+        if (stockSortField === 'current' || stockSortField === 'sell' || stockSortField === 'dealer') {
+          aVal = parseFloat(aVal) || 0;
+          bVal = parseFloat(bVal) || 0;
+        } else {
+          aVal = String(aVal || '').toLowerCase();
+          bVal = String(bVal || '').toLowerCase();
+        }
+
+        if (aVal < bVal) return stockSortAsc ? -1 : 1;
+        if (aVal > bVal) return stockSortAsc ? 1 : -1;
+        return 0;
+      });
+
       const low = filtered.filter(s => s.current < 100);
       document.getElementById('low-stock-alert').innerHTML = low.length
         ? `<div class="alert alert-red" style="margin-bottom:14px">⚠️ Low stock: <strong>${low.map(s => s.num).join(', ')}</strong> — below 100 units. Reorder soon.</div>` : '';
       document.getElementById('nb-stock').textContent = stock.length;
-      const g = document.getElementById('stock-grid');
-      if (!filtered.length) { g.innerHTML = '<div class="empty-state"><div class="empty-icon">📦</div>No stock entries found</div>'; return; }
-      g.innerHTML = filtered.map(s => `
-    <div class="stock-card ${s.current < 100 ? 'low-stock' : ''}" style="position:relative">
-      ${s.current < 100 ? '<span class="low-badge">LOW</span>' : ''}
-      <div class="stock-num">${s.num}</div>
-      <div class="stock-qty">${parseInt(s.current).toLocaleString('en-IN')}</div>
-      <div class="stock-lbl">current stock</div>
-      <div class="stock-lbl" style="margin-top:4px;font-size:10px">Arrived: ${parseInt(s.arrived).toLocaleString('en-IN')}</div>
-      <div class="stock-vendor">${s.vendor}</div>
-      <div class="stock-prices">
-        <span class="price-sell">Sell: ₹${s.sell}/pc</span>
-        <span class="price-dealer">Dealer: ₹${s.dealer}</span>
-      </div>
-      ${s.nop ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">Without printing: ₹${s.nop}/pc</div>` : ''}
-      <div style="display:flex;gap:6px;margin-top:8px;border-top:1px solid var(--paper2);padding-top:6px">
-        <button onclick="openStockEdit('${s.num}')" style="flex:1;font-size:11px;color:var(--gold-dark);background:none;border:1px solid var(--border);padding:4px;border-radius:4px;cursor:pointer">✏️ Edit</button>
-        <button onclick="viewStockHistory('${s.num}')" style="flex:1;font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);padding:4px;border-radius:4px;cursor:pointer">📊 History</button>
-      </div>
-    </div>`).join('');
+
+      const tbody = document.getElementById('stock-tbody');
+      if (!filtered.length) {
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">📦 No stock entries found</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(s => `
+        <tr>
+          <td><span class="order-id">${s.num}</span></td>
+          <td><strong>${parseInt(s.current).toLocaleString('en-IN')}</strong> ${s.current < 100 ? '<span class="low-badge" style="margin-left:4px">LOW</span>' : ''}</td>
+          <td>${parseInt(s.arrived).toLocaleString('en-IN')}</td>
+          <td>${s.sell ? '₹' + parseFloat(s.sell).toFixed(0) : '—'}</td>
+          <td>${s.dealer ? '₹' + parseFloat(s.dealer).toFixed(0) : '—'}</td>
+          <td>${s.nop ? '₹' + parseFloat(s.nop).toFixed(0) : '—'}</td>
+          <td><span style="font-size:12px;color:var(--muted)">${s.vendor || '—'}</span></td>
+          <td>
+            <button onclick="openStockEdit('${s.num}')" style="padding:4px 10px;font-size:11px;background:linear-gradient(135deg,var(--gold),#E8B737);color:var(--ink);border:none;border-radius:4px;cursor:pointer;margin-right:4px;transition:var(--transition)" onmouseover="this.style.transform='translateY(-2px);filter:brightness(1.1)'" onmouseout="this.style.transform='translateY(0)';this.style.filter='brightness(1)'">✏️ Edit</button>
+            <button onclick="viewStockHistory('${s.num}')" style="padding:4px 10px;font-size:11px;background:var(--paper2);color:var(--muted);border:1px solid var(--border);border-radius:4px;cursor:pointer;transition:var(--transition)" onmouseover="this.style.borderColor='var(--gold)';this.style.color='var(--gold)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">📊 History</button>
+          </td>
+        </tr>
+      `).join('');
     }
 
     let editingStockNum = null;
