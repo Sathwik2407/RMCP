@@ -11,10 +11,10 @@ A full-stack order management system for wedding card printing.
 | Layer     | Technology         |
 |-----------|--------------------|
 | Backend   | Python 3 + Flask   |
-| Database  | SQLite (file-based) |
+| Database  | PostgreSQL         |
 | Frontend  | Vanilla HTML/JS    |
 
-No external database server needed — SQLite stores everything in `rmcp.db` automatically.
+Database hosted on Railway with automatic schema initialization on app startup.
 
 ---
 
@@ -68,9 +68,10 @@ The app runs at: **http://localhost:5050**
 
 ## Data Storage
 
-- Database: `rmcp.db` (created automatically on first run)
+- Database: PostgreSQL (Railway-managed)
+- Connection via `DATABASE_URL` environment variable
 - Demo seed data loads automatically if the database is empty
-- All data persists across restarts
+- All data persists across deployments with automatic backups
 
 ---
 
