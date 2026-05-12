@@ -802,15 +802,28 @@ def list_customers():
 
 @app.route('/api/customers/<phone>', methods=['GET'])
 def get_customer(phone):
-    """Get customer details by phone."""
+    """Get customer details by phone, including all their orders sorted newest first."""
     with get_db() as conn:
         c = conn.cursor()
+
+        # Fetch customer profile
         c.execute('SELECT * FROM customers WHERE phone=%s', (phone,))
-        row = c.fetchone()
+        customer = c.fetchone()
+        if not customer:
+            c.close()
+            return jsonify({'error': 'Not found'}), 404
+
+        # Fetch every order placed by this phone number, newest first
+        c.execute(
+            'SELECT * FROM orders WHERE phone=%s ORDER BY created DESC',
+            (phone,)
+        )
+        orders = c.fetchall()
         c.close()
-    if not row:
-        return jsonify({'error': 'Not found'}), 404
-    return jsonify(row_to_dict(row))
+
+    result = row_to_dict(customer)
+    result['orders'] = rows_to_list(orders)
+    return jsonify(result)
 
 @app.route('/api/customers', methods=['POST'])
 def add_customer():
