@@ -410,6 +410,11 @@
       transition: var(--transition);
     }
 
+    .btn-sm {
+      padding: 4px 12px;
+      font-size: 12px;
+    }
+
     .search-box:focus {
       border-color: var(--gold);
       box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
@@ -1644,6 +1649,9 @@
       <div class="nav-item" id="snav-estimation" onclick="nav('estimation')"><span class="nav-icon">🧾</span> Estimation
       </div>
       <div class="nav-item" id="snav-sales" onclick="nav('sales')"><span class="nav-icon">📊</span> Sales Report</div>
+      <div class="nav-section">Customers</div>
+      <div class="nav-item" id="snav-customers" onclick="nav('customers')"><span class="nav-icon">👥</span> Customers
+      </div>
       <div class="nav-section">Tools</div>
       <div class="nav-item" id="snav-whatsapp" onclick="nav('whatsapp')"><span class="nav-icon">💬</span> WhatsApp Msgs
       </div>
@@ -1907,7 +1915,8 @@
                   onclick="salesSortBy('created'); renderSales()"><span>Date</span><span id="sort-arrow-created"
                     class="sort-arrow"></span></th>
                 <th style="width:100px; cursor: pointer; user-select: none;" onclick="salesSortBy('id'); renderSales()">
-                  <span>Order ID</span><span id="sort-arrow-id" class="sort-arrow"></span></th>
+                  <span>Order ID</span><span id="sort-arrow-id" class="sort-arrow"></span>
+                </th>
                 <th style="width:140px; cursor: pointer; user-select: none;"
                   onclick="salesSortBy('name'); renderSales()"><span>Customer</span><span id="sort-arrow-name"
                     class="sort-arrow"></span></th>
@@ -1915,7 +1924,8 @@
                   onclick="salesSortBy('type'); renderSales()"><span>Item</span><span id="sort-arrow-type"
                     class="sort-arrow"></span></th>
                 <th style="width:80px; cursor: pointer; user-select: none;" onclick="salesSortBy('qty'); renderSales()">
-                  <span>Qty</span><span id="sort-arrow-qty" class="sort-arrow"></span></th>
+                  <span>Qty</span><span id="sort-arrow-qty" class="sort-arrow"></span>
+                </th>
                 <th style="width:100px; cursor: pointer; user-select: none;"
                   onclick="salesSortBy('amount'); renderSales()"><span>Total</span><span id="sort-arrow-amount"
                     class="sort-arrow"></span></th>
@@ -1930,6 +1940,44 @@
               </tr>
             </thead>
             <tbody id="sales-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- PAGE: CUSTOMERS -->
+      <div class="page" id="page-customers">
+        <div class="toolbar">
+          <span class="toolbar-title">Customers</span>
+          <input class="search-box" type="text" id="cust-search" placeholder="Search name or phone number…"
+            oninput="renderCustomers()" style="width:280px;margin-left:auto;">
+        </div>
+        <div class="report-summary">
+          <div class="rep-card">
+            <div class="rep-val" id="c-total">0</div>
+            <div class="rep-lbl">Total Customers</div>
+          </div>
+          <div class="rep-card">
+            <div class="rep-val" id="c-revenue">₹0</div>
+            <div class="rep-lbl">Total Revenue</div>
+          </div>
+          <div class="rep-card">
+            <div class="rep-val" id="c-orders">0</div>
+            <div class="rep-lbl">Total Orders</div>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table id="cust-table">
+            <thead>
+              <tr>
+                <th style="width:160px">Customer</th>
+                <th style="width:130px">Phone</th>
+                <th style="width:80px">Orders</th>
+                <th style="width:130px">Total Spent</th>
+                <th style="width:130px">Last Order</th>
+                <th style="width:80px"></th>
+              </tr>
+            </thead>
+            <tbody id="cust-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -2129,6 +2177,43 @@
   <!-- ORDER DETAIL OVERLAY -->
   <div class="overlay" id="detail-overlay">
     <div class="detail-modal" id="detail-content"></div>
+
+    <!-- CUSTOMER DRAWER -->
+    <div id="cust-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:400;"
+      onclick="closeCustomerDrawer()"></div>
+    <div id="cust-drawer"
+      style="display:none;position:fixed;top:0;right:0;width:520px;max-width:100vw;height:100vh;background:var(--surface);box-shadow:-4px 0 24px rgba(0,0,0,0.18);z-index:401;overflow-y:auto;flex-direction:column;">
+      <div
+        style="display:flex;align-items:center;justify-content:space-between;padding:20px 24px 16px;border-bottom:1px solid var(--border);">
+        <div>
+          <div id="cd-name" style="font-size:20px;font-weight:700;color:var(--text);"></div>
+          <div id="cd-phone" style="font-size:13px;color:var(--muted);margin-top:2px;"></div>
+        </div>
+        <button onclick="closeCustomerDrawer()"
+          style="background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);line-height:1;">×</button>
+      </div>
+      <div style="padding:20px 24px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:24px;">
+          <div style="background:var(--bg);border-radius:10px;padding:14px 12px;text-align:center;">
+            <div id="cd-orders" style="font-size:22px;font-weight:700;color:var(--accent);">0</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Orders</div>
+          </div>
+          <div style="background:var(--bg);border-radius:10px;padding:14px 12px;text-align:center;">
+            <div id="cd-spent" style="font-size:22px;font-weight:700;color:var(--green);">₹0</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Total Spent</div>
+          </div>
+          <div style="background:var(--bg);border-radius:10px;padding:14px 12px;text-align:center;">
+            <div id="cd-lastorder" style="font-size:14px;font-weight:600;color:var(--text);">—</div>
+            <div style="font-size:11px;color:var(--muted);margin-top:2px;">Last Order</div>
+          </div>
+        </div>
+        <div id="cd-info" style="margin-bottom:24px;font-size:13px;color:var(--muted);"></div>
+        <div
+          style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.05em;">
+          Order History</div>
+        <div id="cd-orders-list"></div>
+      </div>
+    </div>
   </div>
 
   <!-- STOCK ENTRY OVERLAY -->
@@ -2192,6 +2277,7 @@
     // ─── STATE ─────────────────────────────────────────────────────────────────
     let orders = [];
     let stock = [];
+    let customers = [];
     let activeFilter = 'all';
     let estRows = [];
     let selectedPayments = [];
@@ -2252,6 +2338,7 @@
       if (page === 'print') { await loadOrders(); renderPrint(); }
       if (page === 'stock') { await loadStock(); renderStock(); }
       if (page === 'sales') { await loadOrders(); renderSales(); }
+      if (page === 'customers') { await loadCustomers(); renderCustomers(); }
       if (page === 'whatsapp') { /* render whatsapp templates */ }
     }
 
@@ -2802,6 +2889,121 @@
         + '<script>window.onload=function(){window.print();};<\/script>'
         + '</body></html>');
       win.document.close();
+    }
+
+    // ─── CUSTOMERS ──────────────────────────────────────────────────────────────
+    async function loadCustomers() {
+      try { customers = await apiFetch('/customers'); } catch (e) { customers = []; }
+    }
+
+    function renderCustomers() {
+      const q = (document.getElementById('cust-search')?.value || '').toLowerCase();
+      const filtered = customers.filter(c =>
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.phone || '').toLowerCase().includes(q)
+      );
+
+      // Summary stats
+      document.getElementById('c-total').textContent = filtered.length;
+      document.getElementById('c-revenue').textContent = fmtINR(filtered.reduce((s, c) => s + (c.total_spent || 0), 0));
+      document.getElementById('c-orders').textContent = filtered.reduce((s, c) => s + (c.total_orders || 0), 0);
+
+      const tbody = document.getElementById('cust-tbody');
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:40px;">No customers found</td></tr>';
+        return;
+      }
+      tbody.innerHTML = filtered.map(c => `
+        <tr style="cursor:pointer;" onclick="openCustomerDrawer('${c.phone}')">
+          <td><div class="cell-name">${c.name}</div></td>
+          <td><div class="cell-sub" style="color:var(--text)">${c.phone}</div></td>
+          <td><strong>${c.total_orders || 0}</strong></td>
+          <td><strong style="color:var(--green)">${fmtINR(c.total_spent)}</strong></td>
+          <td style="color:var(--muted);font-size:12px">${fmtDate(c.last_order_date)}</td>
+          <td><button class="btn btn-sm" onclick="event.stopPropagation();openCustomerDrawer('${c.phone}')">View</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function openCustomerDrawer(phone) {
+      // Show overlay + drawer
+      document.getElementById('cust-overlay').style.display = 'block';
+      const drawer = document.getElementById('cust-drawer');
+      drawer.style.display = 'flex';
+
+      // Reset content while loading
+      document.getElementById('cd-name').textContent = 'Loading…';
+      document.getElementById('cd-phone').textContent = phone;
+      document.getElementById('cd-orders').textContent = '—';
+      document.getElementById('cd-spent').textContent = '—';
+      document.getElementById('cd-lastorder').textContent = '—';
+      document.getElementById('cd-info').innerHTML = '';
+      document.getElementById('cd-orders-list').innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;">Loading orders…</div>';
+
+      try {
+        const c = await apiFetch(`/customers/${encodeURIComponent(phone)}`);
+
+        document.getElementById('cd-name').textContent = c.name;
+        document.getElementById('cd-phone').textContent = c.phone;
+        document.getElementById('cd-orders').textContent = c.total_orders || 0;
+        document.getElementById('cd-spent').textContent = fmtINR(c.total_spent);
+        document.getElementById('cd-lastorder').textContent = fmtDate(c.last_order_date);
+
+        // Contact info
+        const infoParts = [];
+        if (c.email) infoParts.push(`✉️ ${c.email}`);
+        if (c.address) infoParts.push(`📍 ${c.address}${c.city ? ', ' + c.city : ''}`);
+        document.getElementById('cd-info').innerHTML = infoParts.map(p =>
+          `<div style="margin-bottom:4px;">${p}</div>`
+        ).join('');
+
+        // Order history
+        const orderList = document.getElementById('cd-orders-list');
+        const orderArr = c.orders || [];
+        if (!orderArr.length) {
+          orderList.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0;text-align:center;">No orders found for this customer.</div>';
+          return;
+        }
+
+        const STATUS_DOT = {
+          'New': '#6B7280', 'Design': '#8B5CF6', 'Proof Sent': '#3B82F6',
+          'Confirmed': '#06B6D4', 'Printing': '#F59E0B', 'Ready': '#10B981', 'Delivered': '#22C55E'
+        };
+
+        orderList.innerHTML = orderArr.map(o => {
+          const bal = (o.amount || 0) - (o.advance || 0);
+          const dotColor = STATUS_DOT[o.status] || '#6B7280';
+          return `
+            <div style="background:var(--bg);border-radius:10px;padding:14px 16px;margin-bottom:10px;border-left:3px solid ${dotColor};">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                <span style="font-weight:700;font-size:13px;color:var(--accent);">${o.id}</span>
+                <span style="font-size:11px;font-weight:600;color:${dotColor};background:${dotColor}18;padding:2px 8px;border-radius:20px;">${o.status}</span>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:var(--muted);">
+                <span>📦 ${o.type}${o.model ? ' · ' + o.model : ''}</span>
+                <span>🔢 ${o.qty || 0} cards</span>
+                <span>💰 ${fmtINR(o.amount)}</span>
+                <span style="color:${bal > 0 ? 'var(--red)' : 'var(--green)'};">
+                  ${bal > 0 ? '⚠️ Bal: ' + fmtINR(bal) : '✅ Paid'}
+                </span>
+                <span>📅 Ordered: ${fmtDate(o.created)}</span>
+                <span>🚚 Deliver: ${fmtDate(o.delivery)}</span>
+              </div>
+              ${o.matter ? `<div style="font-size:12px;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--border);white-space:pre-wrap;">${o.matter.substring(0, 120)}${o.matter.length > 120 ? '…' : ''}</div>` : ''}
+            </div>
+          `;
+        }).join('');
+
+      } catch (e) {
+        document.getElementById('cd-name').textContent = 'Error loading customer';
+        document.getElementById('cd-orders-list').innerHTML =
+          '<div style="color:var(--red);font-size:13px;">Could not load customer data. Please try again.</div>';
+      }
+    }
+
+    function closeCustomerDrawer() {
+      document.getElementById('cust-overlay').style.display = 'none';
+      document.getElementById('cust-drawer').style.display = 'none';
     }
 
     // ─── SALES ───────────────────────────────────────────────────────────────────
