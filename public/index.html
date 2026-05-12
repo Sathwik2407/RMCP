@@ -1876,7 +1876,11 @@
 
       <!-- PAGE: SALES -->
       <div class="page" id="page-sales">
-        <div class="toolbar"><span class="toolbar-title">Sales Report</span></div>
+        <div class="toolbar">
+          <span class="toolbar-title">Sales Report</span>
+          <input class="search-box" type="text" id="sales-search" placeholder="Search customer, order ID, or item…"
+            oninput="renderSales()" style="width: 280px; margin-left: auto;">
+        </div>
         <div class="report-summary">
           <div class="rep-card">
             <div class="rep-val" id="r-total">₹0</div>
@@ -1896,19 +1900,33 @@
           </div>
         </div>
         <div class="tbl-wrap">
-          <table>
+          <table id="sales-table">
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Order ID</th>
-                <th>Customer</th>
-                <th>Item</th>
-                <th>Qty</th>
-                <th>Total</th>
-                <th>Advance</th>
-                <th>Balance</th>
-                <th>Payment</th>
-                <th>Status</th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('created'); renderSales()"><span>Date</span><span id="sort-arrow-created"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;" onclick="salesSortBy('id'); renderSales()">
+                  <span>Order ID</span><span id="sort-arrow-id" class="sort-arrow"></span></th>
+                <th style="width:140px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('name'); renderSales()"><span>Customer</span><span id="sort-arrow-name"
+                    class="sort-arrow"></span></th>
+                <th style="width:120px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('type'); renderSales()"><span>Item</span><span id="sort-arrow-type"
+                    class="sort-arrow"></span></th>
+                <th style="width:80px; cursor: pointer; user-select: none;" onclick="salesSortBy('qty'); renderSales()">
+                  <span>Qty</span><span id="sort-arrow-qty" class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('amount'); renderSales()"><span>Total</span><span id="sort-arrow-amount"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('advance'); renderSales()"><span>Advance</span><span id="sort-arrow-advance"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px; cursor: pointer; user-select: none;"
+                  onclick="salesSortBy('balance'); renderSales()"><span>Balance</span><span id="sort-arrow-balance"
+                    class="sort-arrow"></span></th>
+                <th style="width:100px;">Payment</th>
+                <th style="width:100px;">Status</th>
               </tr>
             </thead>
             <tbody id="sales-tbody"></tbody>
@@ -2528,6 +2546,8 @@
     // ─── STOCK ───────────────────────────────────────────────────────────────────
     let stockSortField = 'num';
     let stockSortAsc = true;
+    let salesSortField = 'created';
+    let salesSortAsc = false;
 
     function stockSortBy(field) {
       if (stockSortField === field) {
@@ -2785,17 +2805,66 @@
     }
 
     // ─── SALES ───────────────────────────────────────────────────────────────────
+    function salesSortBy(field) {
+      if (salesSortField === field) {
+        salesSortAsc = !salesSortAsc;
+      } else {
+        salesSortField = field;
+        salesSortAsc = true;
+      }
+
+      document.querySelectorAll('#sales-table .sort-arrow').forEach(arrow => arrow.textContent = '');
+      const arrowElement = document.getElementById('sort-arrow-' + field);
+      if (arrowElement) {
+        arrowElement.textContent = salesSortAsc ? '↑' : '↓';
+      }
+    }
+
     function renderSales() {
-      const total = orders.reduce((s, o) => s + parseInt(o.amount || 0), 0);
-      const adv = orders.reduce((s, o) => s + parseInt(o.advance || 0), 0);
+      const searchVal = (document.getElementById('sales-search')?.value || '').toLowerCase();
+
+      document.querySelectorAll('#sales-table .sort-arrow').forEach(arrow => arrow.textContent = '');
+      const arrowElement = document.getElementById('sort-arrow-' + salesSortField);
+      if (arrowElement) {
+        arrowElement.textContent = salesSortAsc ? '↑' : '↓';
+      }
+
+      const filtered = orders.filter(o =>
+        o.name.toLowerCase().includes(searchVal) ||
+        o.phone.toLowerCase().includes(searchVal) ||
+        o.id.toLowerCase().includes(searchVal) ||
+        (o.type && o.type.toLowerCase().includes(searchVal))
+      );
+
+      filtered.sort((a, b) => {
+        let aVal = a[salesSortField];
+        let bVal = b[salesSortField];
+
+        if (salesSortField === 'created') {
+          aVal = new Date(aVal || 0).getTime();
+          bVal = new Date(bVal || 0).getTime();
+        } else if (salesSortField === 'qty' || salesSortField === 'amount' || salesSortField === 'advance' || salesSortField === 'balance') {
+          aVal = parseInt(aVal) || 0;
+          bVal = parseInt(bVal) || 0;
+        } else {
+          aVal = String(aVal || '').toLowerCase();
+          bVal = String(bVal || '').toLowerCase();
+        }
+
+        if (aVal < bVal) return salesSortAsc ? -1 : 1;
+        if (aVal > bVal) return salesSortAsc ? 1 : -1;
+        return 0;
+      });
+
+      const total = filtered.reduce((s, o) => s + parseInt(o.amount || 0), 0);
+      const adv = filtered.reduce((s, o) => s + parseInt(o.advance || 0), 0);
       document.getElementById('r-total').textContent = fmtINR(total);
       document.getElementById('r-advance').textContent = fmtINR(adv);
       document.getElementById('r-balance').textContent = fmtINR(total - adv);
-      document.getElementById('r-orders').textContent = orders.length;
+      document.getElementById('r-orders').textContent = filtered.length;
       const tbody = document.getElementById('sales-tbody');
-      if (!orders.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">No orders yet</div></td></tr>'; return; }
-      const sorted = [...orders].sort((a, b) => new Date(b.created) - new Date(a.created));
-      tbody.innerHTML = sorted.map(o => {
+      if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">No orders found</div></td></tr>'; return; }
+      tbody.innerHTML = filtered.map(o => {
         const bal = parseInt(o.amount || 0) - parseInt(o.advance || 0);
         return `<tr onclick="openDetail('${o.id}')">
       <td style="font-size:12px;color:var(--muted)">${fmtDate(o.created)}</td>
