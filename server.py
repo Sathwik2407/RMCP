@@ -331,6 +331,13 @@ def seed_db():
 
     c.execute('UPDATE counter SET val = 5 WHERE id = 1')
 
+    # Deduct stock for demo orders
+    for o in orders:
+        model = o[5]
+        qty = o[6]
+        if model and qty > 0:
+            c.execute('UPDATE stock SET current = current - %s WHERE num = %s', (qty, model))
+
     # Sync customer statistics to match the seeded orders.
     # Each tuple is (phone, total_orders, total_spent, last_order_date).
     # These values are computed directly from the orders list above so that
@@ -490,6 +497,18 @@ def create_order():
             data.get('created', datetime.now().isoformat()),
         ))
         
+        # Deduct stock quantity
+        model = data.get('model','')
+        qty = int(data.get('qty', 0))
+        if model and qty > 0:
+            c.execute('SELECT current FROM stock WHERE num = %s', (model,))
+            stock_row = c.fetchone()
+            if stock_row:
+                old_qty = stock_row['current']
+                new_qty = old_qty - qty
+                c.execute('UPDATE stock SET current = %s WHERE num = %s', (new_qty, model))
+                log_stock_movement(conn, model, 'DEDUCT', old_qty, new_qty, f'Order {order_id}')
+        
         # Update customer order statistics
         update_customer_order_stats(conn, data.get('phone',''), float(data.get('amount', 0)))
         
@@ -518,10 +537,12 @@ def update_order(order_id):
 
         # BUG FIX: fetch the current order so we can adjust customer stats correctly.
         # We need the old phone (customer may change) and the old amount.
-        c.execute('SELECT phone, amount FROM orders WHERE id=%s', (order_id,))
+        c.execute('SELECT phone, amount, model, qty FROM orders WHERE id=%s', (order_id,))
         old_order = c.fetchone()
         old_phone  = old_order['phone']  if old_order else None
         old_amount = float(old_order['amount']) if old_order else 0.0
+        old_model = old_order['model'] if old_order else None
+        old_qty = int(old_order['qty']) if old_order else 0
 
         new_phone  = data.get('phone', '')
         new_amount = float(data.get('amount', 0))
@@ -589,6 +610,40 @@ def update_order(order_id):
                 WHERE phone = %s
             ''', (old_amount, new_amount, new_phone))
 
+        # Adjust stock for quantity/model changes
+        new_model = data.get('model','')
+        new_qty = int(data.get('qty', 0))
+        if old_model != new_model:
+            # Model changed: add back to old, deduct from new
+            if old_model and old_qty > 0:
+                c.execute('SELECT current FROM stock WHERE num = %s', (old_model,))
+                stock_row = c.fetchone()
+                if stock_row:
+                    old_stock_qty = stock_row['current']
+                    new_stock_qty = old_stock_qty + old_qty
+                    c.execute('UPDATE stock SET current = %s WHERE num = %s', (new_stock_qty, old_model))
+                    log_stock_movement(conn, old_model, 'ADD', old_stock_qty, new_stock_qty, f'Order update {order_id} - revert')
+            if new_model and new_qty > 0:
+                c.execute('SELECT current FROM stock WHERE num = %s', (new_model,))
+                stock_row = c.fetchone()
+                if stock_row:
+                    old_stock_qty = stock_row['current']
+                    new_stock_qty = old_stock_qty - new_qty
+                    c.execute('UPDATE stock SET current = %s WHERE num = %s', (new_stock_qty, new_model))
+                    log_stock_movement(conn, new_model, 'DEDUCT', old_stock_qty, new_stock_qty, f'Order update {order_id}')
+        elif old_model == new_model and old_qty != new_qty:
+            # Same model, qty changed
+            qty_diff = new_qty - old_qty
+            if qty_diff != 0:
+                c.execute('SELECT current FROM stock WHERE num = %s', (new_model,))
+                stock_row = c.fetchone()
+                if stock_row:
+                    old_stock_qty = stock_row['current']
+                    new_stock_qty = old_stock_qty - qty_diff
+                    c.execute('UPDATE stock SET current = %s WHERE num = %s', (new_stock_qty, new_model))
+                    action = 'DEDUCT' if qty_diff > 0 else 'ADD'
+                    log_stock_movement(conn, new_model, action, old_stock_qty, new_stock_qty, f'Order update {order_id} - qty change')
+
         conn.commit()
         c.execute('SELECT * FROM orders WHERE id=%s', (order_id,))
         row = c.fetchone()
@@ -615,7 +670,7 @@ def delete_order(order_id):
 
         # BUG FIX: capture the order's phone and amount BEFORE deleting so we
         # can subtract them from the customer's running totals.
-        c.execute('SELECT phone, amount FROM orders WHERE id=%s', (order_id,))
+        c.execute('SELECT phone, amount, model, qty FROM orders WHERE id=%s', (order_id,))
         order = c.fetchone()
 
         c.execute('DELETE FROM orders WHERE id=%s', (order_id,))
@@ -623,6 +678,8 @@ def delete_order(order_id):
         if order:
             phone  = order['phone']
             amount = float(order['amount'] or 0)
+            model = order['model']
+            qty = int(order['qty'] or 0)
             # Decrement stats; GREATEST(..., 0) prevents going negative from
             # any historical data inconsistency.
             c.execute('''
@@ -632,6 +689,16 @@ def delete_order(order_id):
                     updated      = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
                 WHERE phone = %s
             ''', (amount, phone))
+
+            # Add back stock quantity
+            if model and qty > 0:
+                c.execute('SELECT current FROM stock WHERE num = %s', (model,))
+                stock_row = c.fetchone()
+                if stock_row:
+                    old_qty = stock_row['current']
+                    new_qty = old_qty + qty
+                    c.execute('UPDATE stock SET current = %s WHERE num = %s', (new_qty, model))
+                    log_stock_movement(conn, model, 'ADD', old_qty, new_qty, f'Order delete {order_id}')
 
         conn.commit()
         c.close()
