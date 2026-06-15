@@ -51,8 +51,11 @@ import psycopg2.extras
 import psycopg2.pool
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-# Railway automatically sets DATABASE_URL when you add a PostgreSQL service
+# Railway/Render set DATABASE_URL; Render uses postgres:// scheme which
+# psycopg2 doesn't accept — normalise it to postgresql://.
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
+if DATABASE_URL.startswith('postgres://'):
+    DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 FRONTEND     = os.path.join(os.path.dirname(__file__), 'public')
 
 app = Flask(__name__, static_folder=FRONTEND, static_url_path='')
@@ -78,7 +81,7 @@ def handle_options():
 # ─── CONNECTION POOL ──────────────────────────────────────────────────────────
 # Initialised after the DATABASE_URL check below (module bottom).
 # min=2 keeps two warm connections ready; max=10 caps total Postgres connections.
-_pool: psycopg2.pool.ThreadedConnectionPool | None = None
+_pool = None  # type: psycopg2.pool.ThreadedConnectionPool
 
 def _init_pool():
     global _pool
@@ -263,6 +266,10 @@ def init_db():
 
 def seed_db():
     """Seed demo data only if orders table is empty."""
+    def date_off(days):
+        from datetime import timedelta
+        return (date.today() + timedelta(days=days)).isoformat()
+
     with get_db() as conn:
         c = conn.cursor()
         c.execute('SELECT COUNT(*) FROM orders')
@@ -271,93 +278,85 @@ def seed_db():
             c.close()
             return
 
-    def date_off(days):
-        from datetime import timedelta
-        return (date.today() + timedelta(days=days)).isoformat()
+        stock_rows = [
+            ('R100', 1000, 100,  8, 18, 13, 'Novelty, Delhi'),
+            ('R101', 1000, 500,  8, 18, 13, 'Novelty, Delhi'),
+            ('R102', 1200, 800,  9, 20, 15, 'Novelty, Delhi'),
+            ('R103', 1000, 900, 10, 22, 18, 'Novelty, Delhi'),
+            ('B501',  800, 800, 14, 48, 35, 'Charla'),
+            ('B502', 1000, 800, 14, 48, 35, 'Charla'),
+            ('P701', 1000, 1000,40, 88, 65, 'Shubham Cards'),
+        ]
+        for row in stock_rows:
+            c.execute('''
+                INSERT INTO stock (num,arrived,current,dealer,sell,nop,vendor)
+                VALUES (%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (num) DO NOTHING
+            ''', row)
 
-    stock_rows = [
-        ('R100', 1000, 100,  8, 18, 13, 'Novelty, Delhi'),
-        ('R101', 1000, 500,  8, 18, 13, 'Novelty, Delhi'),
-        ('R102', 1200, 800,  9, 20, 15, 'Novelty, Delhi'),
-        ('R103', 1000, 900, 10, 22, 18, 'Novelty, Delhi'),
-        ('B501',  800, 800, 14, 48, 35, 'Charla'),
-        ('B502', 1000, 800, 14, 48, 35, 'Charla'),
-        ('P701', 1000, 1000,40, 88, 65, 'Shubham Cards'),
-    ]
-    for row in stock_rows:
-        c.execute('''
-            INSERT INTO stock (num,arrived,current,dealer,sell,nop,vendor)
-            VALUES (%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (num) DO NOTHING
-        ''', row)
+        customer_rows = [
+            ('99999 99999', 'Siddha Venkateswara Rao', 'siddha@example.com', '12 Temple Rd', 'Kakinada'),
+            ('88888 88888', 'Thummala Babu', 'thummala@example.com', '4 River St', 'Kakinada'),
+            ('77777 77777', 'Uppalapati Rudra Raju', 'uppalapati@example.com', '9 Hillside Ln', 'Kakinada'),
+            ('99112233445', 'Lakshmi Prasad', 'lakshmi@example.com', '27 Main Rd', 'Kakinada'),
+        ]
+        for row in customer_rows:
+            c.execute('''
+                INSERT INTO customers (phone, name, email, address, city, updated)
+                VALUES (%s, %s, %s, %s, %s, to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
+                ON CONFLICT (phone) DO NOTHING
+            ''', row)
 
-    customer_rows = [
-        ('99999 99999', 'Siddha Venkateswara Rao', 'siddha@example.com', '12 Temple Rd', 'Kakinada'),
-        ('88888 88888', 'Thummala Babu', 'thummala@example.com', '4 River St', 'Kakinada'),
-        ('77777 77777', 'Uppalapati Rudra Raju', 'uppalapati@example.com', '9 Hillside Ln', 'Kakinada'),
-        ('99112233445', 'Lakshmi Prasad', 'lakshmi@example.com', '27 Main Rd', 'Kakinada'),
-    ]
-    for row in customer_rows:
-        c.execute('''
-            INSERT INTO customers (phone, name, email, address, city, updated)
-            VALUES (%s, %s, %s, %s, %s, to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'))
-            ON CONFLICT (phone) DO NOTHING
-        ''', row)
+        orders = [
+            ('WC10310001','99999 99999','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',
+             date_off(2),'Urgent','Brother 1','Telugu + English, Gold Acrylic plate',
+             'Bride: Priya, Groom: Siddha Venkateswara Rao. Parents: Suresh & Lakshmi. Wedding: 25 April 2025. Venue: Sri Kalyana Mandapam.',
+             'Delivery on 25th morning 9 AM sharp','Printing'),
+            ('WC10150002','88888 88888','Thummala Babu','88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',
+             date_off(5),'Normal','Brother 2','Two different matters, each 250 cards',
+             'Matter 1: Bride: Anitha, Groom: Raju. Matter 2: Bride: Swathi, Groom: Kumar.',
+             '','Proof Sent'),
+            ('MC150003','77777 77777','Uppalapati Rudra Raju','77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',
+             date_off(12),'Normal','Brother 1','9×9 size, Box Cover, Title with gold foil, Inner two sheets S/S',
+             'Full Telugu matter to be provided separately.',
+             'Agreed to deliver 2 days early if possible','Design'),
+            ('WC10340004','99112233445','Lakshmi Prasad','99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',
+             date_off(-1),'Urgent','Brother 2','','','','Ready'),
+        ]
+        for o in orders:
+            c.execute('''
+                INSERT INTO orders
+                  (id,customer_id,name,phone,type,model,qty,price,amount,advance,payment,
+                   delivery,priority,handler,req,matter,commitments,status)
+                VALUES (%s,(SELECT id FROM customers WHERE phone=%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                ON CONFLICT (id) DO NOTHING
+            ''', o)
 
-    orders = [
-        ('WC10310001','99999 99999','Siddha Venkateswara Rao','99999 99999','Readymade','R103',100,22,2200,1000,'Cash',
-         date_off(2),'Urgent','Brother 1','Telugu + English, Gold Acrylic plate',
-         'Bride: Priya, Groom: Siddha Venkateswara Rao. Parents: Suresh & Lakshmi. Wedding: 25 April 2025. Venue: Sri Kalyana Mandapam.',
-         'Delivery on 25th morning 9 AM sharp','Printing'),
-        ('WC10150002','88888 88888','Thummala Babu','88888 88888','Semi-custom','R101',500,18,9000,5000,'PhonePe',
-         date_off(5),'Normal','Brother 2','Two different matters, each 250 cards',
-         'Matter 1: Bride: Anitha, Groom: Raju. Matter 2: Bride: Swathi, Groom: Kumar.',
-         '','Proof Sent'),
-        ('MC150003','77777 77777','Uppalapati Rudra Raju','77777 77777','Fully customised','Customised',1500,65,97500,50000,'Cash',
-         date_off(12),'Normal','Brother 1','9×9 size, Box Cover, Title with gold foil, Inner two sheets S/S',
-         'Full Telugu matter to be provided separately.',
-         'Agreed to deliver 2 days early if possible','Design'),
-        ('WC10340004','99112233445','Lakshmi Prasad','99112233445','Readymade','R103',400,22,8800,3000,'PhonePe',
-         date_off(-1),'Urgent','Brother 2','','','','Ready'),
-    ]
-    for o in orders:
-        c.execute('''
-            INSERT INTO orders
-              (id,customer_id,name,phone,type,model,qty,price,amount,advance,payment,
-               delivery,priority,handler,req,matter,commitments,status)
-            VALUES (%s,(SELECT id FROM customers WHERE phone=%s),%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-            ON CONFLICT (id) DO NOTHING
-        ''', o)
+        c.execute('UPDATE counter SET val = 5 WHERE id = 1')
 
-    c.execute('UPDATE counter SET val = 5 WHERE id = 1')
+        # Deduct stock for demo orders
+        for o in orders:
+            model = o[5]
+            qty = o[6]
+            if model and qty > 0:
+                c.execute('UPDATE stock SET current = current - %s WHERE num = %s', (qty, model))
 
-    # Deduct stock for demo orders
-    for o in orders:
-        model = o[5]
-        qty = o[6]
-        if model and qty > 0:
-            c.execute('UPDATE stock SET current = current - %s WHERE num = %s', (qty, model))
-
-    # Sync customer statistics to match the seeded orders.
-    # Each tuple is (phone, total_orders, total_spent, last_order_date).
-    # These values are computed directly from the orders list above so that
-    # customers who placed multiple demo orders are correctly aggregated.
-    # last_order_date uses NOW() so it always reflects a recent date in dev.
-    seed_stats = [
-        ('99999 99999', 1, 2200),
-        ('88888 88888', 1, 9000),
-        ('77777 77777', 1, 97500),
-        ('99112233445', 1, 8800),
-    ]
-    for phone, total_orders, total_spent in seed_stats:
-        c.execute('''
-            UPDATE customers SET
-                total_orders    = %s,
-                total_spent     = %s,
-                last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'),
-                updated         = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
-            WHERE phone = %s
-        ''', (total_orders, total_spent, phone))
+        # Sync customer statistics to match the seeded orders.
+        seed_stats = [
+            ('99999 99999', 1, 2200),
+            ('88888 88888', 1, 9000),
+            ('77777 77777', 1, 97500),
+            ('99112233445', 1, 8800),
+        ]
+        for phone, total_orders, total_spent in seed_stats:
+            c.execute('''
+                UPDATE customers SET
+                    total_orders    = %s,
+                    total_spent     = %s,
+                    last_order_date = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS'),
+                    updated         = to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS')
+                WHERE phone = %s
+            ''', (total_orders, total_spent, phone))
 
         conn.commit()
         c.close()
